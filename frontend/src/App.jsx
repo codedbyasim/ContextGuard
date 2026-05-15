@@ -1,6 +1,6 @@
 /**
  * ContextGuard Dashboard — Main App
- * Owner: [Developer name]
+ * Owner: Maira
  * Two tabs: Threat Feed | OAuth Apps
  */
 

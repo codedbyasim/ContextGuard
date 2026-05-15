@@ -1,6 +1,6 @@
 """
 ContextGuard — FastAPI Backend
-Owner: [Developer name]
+Owner: Maira
 Endpoints:
   GET  /api/apps            → All OAuth apps with risk scores
   POST /api/scan            → Trigger OAuth scan

@@ -1,6 +1,6 @@
 """
 ContextGuard — Google Workspace OAuth Scanner
-Owner: [Developer name]
+Owner: Maira
 Scans Google Workspace for connected third-party OAuth applications.
 """
 

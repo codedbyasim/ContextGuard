@@ -1,6 +1,6 @@
 /**
  * Threat Feed Tab
- * Owner: [Developer name]
+ * Owner: Maira
  * Shows DPI events from last 24h + compliance report button
  * TODO: implement polling and event display
  */

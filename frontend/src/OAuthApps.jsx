@@ -1,6 +1,6 @@
 /**
  * OAuth Apps Tab
- * Owner: [Developer name]
+ * Owner: Maira
  * Shows all scanned OAuth apps with risk scores + scan button
  * TODO: implement app list and chart
  */

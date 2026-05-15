@@ -1,6 +1,6 @@
 """
 ContextGuard — SQLite Database Layer
-Owner: [Developer name]
+Owner: Maira
 Tables:
   oauth_apps  → Scanned OAuth apps + risk scores
   dpi_events  → Lobster Trap flagged events
