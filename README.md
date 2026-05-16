@@ -67,11 +67,11 @@ flowchart TD
         UI --- UINote
     end
 
-    classDef default fill:#1e293b,stroke:#334155,stroke-width:2px,color:#f8fafc;
-    classDef highlight fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#fff;
-    classDef alert fill:#ef4444,stroke:#dc2626,stroke-width:2px,color:#fff;
-    classDef proxy fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff;
-    classDef bg fill:#0f172a,stroke:#475569,stroke-width:2px,color:#f8fafc;
+    classDef default fill:#f8fafc,stroke:#e2e8f0,stroke-width:2px,color:#1e293b;
+    classDef highlight fill:#eff6ff,stroke:#bfdbfe,stroke-width:2px,color:#1d4ed8;
+    classDef alert fill:#fff1f2,stroke:#fecdd3,stroke-width:2px,color:#be123c;
+    classDef proxy fill:#fffbeb,stroke:#fef3c7,stroke-width:2px,color:#b45309;
+    classDef bg fill:#ffffff,stroke:#f1f5f9,stroke-width:2px,color:#334155;
     
     class Proxy proxy;
     class Backend highlight;
