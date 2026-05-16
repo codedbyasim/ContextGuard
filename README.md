@@ -94,9 +94,18 @@ flowchart TD
 | **M6 — Red-Team Simulator** | ✅ Production | Replays real-world AI supply-chain attack scenarios + live in-browser prompt injection tester |
 | **M7 — Incident Response** | ✅ Production | Guided remediation workflows, step tracking, 1-click credential rotation |
 
+## 📚 Project Documentation
+
+Explore the detailed architecture and requirements of ContextGuard:
+
+- [**Software Requirements Specification (SRS)**](./docs/ContextGuard_SRS_Document.md) — Core functional and non-functional requirements.
+- [**Requirements Traceability Matrix (RTM)**](./docs/Requirements_Traceability_Matrix.md) — Implementation status and feature tracking.
+- [**Implementation Summary**](./docs/Implementation_Summary.md) — Technical details of the production build.
+- [**API Reference**](./docs/API_Reference.md) — Backend endpoint documentation.
+
 ---
 
-## Quick Start
+## 🚀 Quick Start Guide
 
 ### Prerequisites
 
