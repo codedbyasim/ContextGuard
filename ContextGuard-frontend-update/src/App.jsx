@@ -4,7 +4,6 @@ import OAuthApps from './OAuthApps'
 import EnvGuardian from './EnvGuardian'
 import RedTeamSimulator from './RedTeamSimulator'
 import IncidentResponse from './IncidentResponse'
-import { Routes, Route, useNavigate, useLocation, Link, Navigate, useParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   ShieldAlert, AppWindow, FileKey, Crosshair, Activity,
@@ -17,8 +16,7 @@ import {
 const API = import.meta.env.DEV ? 'http://localhost:3000' : ''
 
 /* ─── FOOTER ──────────────────────────────────────────────────── */
-function Footer({ minimal }) {
-  const navigate = useNavigate()
+function Footer({ onNavigate, minimal }) {
   if (minimal) return (
     <footer className="border-t border-zinc-800/60 py-6 px-6 text-center">
       <p className="text-xs text-zinc-600">© 2025 ContextGuard. All rights reserved.</p>
@@ -45,7 +43,7 @@ function Footer({ minimal }) {
               {col.links.map(link => (
                 <li key={link}>
                   <button
-                    onClick={() => { if (link === 'Pricing') navigate('/pricing'); if (link === 'About') navigate('/about'); if (link === 'Features') navigate('/') }}
+                    onClick={() => { if (link === 'Pricing') onNavigate('pricing'); if (link === 'About') onNavigate('about') }}
                     className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
                   >{link}</button>
                 </li>
@@ -67,34 +65,33 @@ function Footer({ minimal }) {
 }
 
 /* ─── ABOUT PAGE ─────────────────────────────────────────────── */
-function AboutPage() {
-  const navigate = useNavigate()
+function AboutPage({ onBack, onEnter }) {
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans">
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-800/60 bg-[#09090b]/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <button onClick={() => navigate('/')} className="flex items-center gap-2.5">
+          <button onClick={onBack} className="flex items-center gap-2.5">
             <Shield className="w-6 h-6 text-blue-500" />
             <span className="font-semibold text-zinc-100 tracking-tight">ContextGuard</span>
           </button>
-          <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
+          <button onClick={onEnter} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
         </div>
       </header>
-      <div className="pt-24 md:pt-28 pb-16 md:pb-20 px-4 sm:px-6">
-        <div className="max-w-4xl mx-auto">
-          <button onClick={() => navigate('/')} className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors mb-8 md:mb-10">
+      <div className="pt-28 pb-20 px-6">
+        <div className="max-w-3xl mx-auto">
+          <button onClick={onBack} className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors mb-10">
             <ChevronRight className="w-4 h-4 rotate-180" /> Back to home
           </button>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-zinc-100 mb-4 md:mb-6">About ContextGuard</h1>
-          <p className="text-base md:text-lg lg:text-xl text-zinc-400 leading-relaxed mb-10 md:mb-12">
-            ContextGuard was built to make AI safe for everyone. We noticed that companies were using AI apps without knowing if they were safe. We built this tool to fix that problem easily.
+          <h1 className="text-4xl font-bold text-zinc-100 mb-6">About ContextGuard</h1>
+          <p className="text-lg text-zinc-400 leading-relaxed mb-12">
+            ContextGuard was built by a team of security engineers and AI researchers who witnessed firsthand how quickly AI agents were being deployed — and how little organizations understood the security implications.
           </p>
           <div className="grid md:grid-cols-2 gap-6 mb-16">
             {[
-              { icon: Shield, title: 'Our Goal', desc: 'Make sure every company can use AI safely, even if they don\'t have a big security team.' },
-              { icon: Eye, title: 'Our Dream', desc: 'A future where you know exactly what your AI apps are doing, without any hidden surprises.' },
-              { icon: Zap, title: 'How We Do It', desc: 'We check your traffic safely in the background. You don\'t need to change any of your code.' },
-              { icon: Globe, title: 'What We Cover', desc: 'We protect your Google Workspace, passwords, and the messages you send to AI.' },
+              { icon: Shield, title: 'Mission', desc: 'Make AI supply-chain security accessible to every organization, regardless of size or security maturity.' },
+              { icon: Eye, title: 'Vision', desc: 'A world where every AI agent operates within a clearly defined, auditable security boundary.' },
+              { icon: Zap, title: 'Approach', desc: 'Transparent proxying with deep packet inspection — no agent code changes, no vendor lock-in.' },
+              { icon: Globe, title: 'Scope', desc: 'Full coverage of Google Workspace, OAuth integrations, environment secrets, and AI prompt traffic.' },
             ].map(item => (
               <div key={item.title} className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/40">
                 <item.icon className="w-5 h-5 text-blue-400 mb-3" />
@@ -107,9 +104,9 @@ function AboutPage() {
             <h2 className="text-2xl font-bold text-zinc-100 mb-8">The problem we solve</h2>
             <div className="space-y-6">
               {[
-                { title: 'AI Apps are risky', desc: 'Many AI apps ask for too much access. A bad app can read your private emails and steal your data.' },
-                { title: 'Attacks are hard to see', desc: 'Some AI tools look safe but secretly steal your passwords. You wouldn\'t even know it happened.' },
-                { title: 'Fixing problems is hard', desc: 'Most companies don\'t have an easy way to stop these bad AI tools when they attack.' },
+                { title: 'AI agents have unchecked access', desc: 'Most AI agents are deployed with broad OAuth scopes and no monitoring. A single compromised prompt can exfiltrate your entire organization\'s data.' },
+                { title: 'Supply-chain attacks are invisible', desc: 'Malicious third-party AI integrations can silently harvest credentials, PII, and API keys — all while appearing legitimate.' },
+                { title: 'Incident response is manual', desc: 'Security teams lack the tooling to detect, triage, and respond to AI-specific threats in real time.' },
               ].map((item, i) => (
                 <div key={i} className="flex gap-4">
                   <div className="w-6 h-6 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -124,9 +121,9 @@ function AboutPage() {
             </div>
           </div>
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-8 text-center">
-            <h3 className="text-xl font-bold text-zinc-100 mb-3">Built for your team</h3>
-            <p className="text-zinc-400 mb-6 text-sm">ContextGuard works with your current setup. No need to change anything.</p>
-            <button onClick={() => navigate('/dashboard')} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2">
+            <h3 className="text-xl font-bold text-zinc-100 mb-3">Built for security teams</h3>
+            <p className="text-zinc-400 mb-6 text-sm">ContextGuard integrates directly with your existing security stack. No rip-and-replace required.</p>
+            <button onClick={onEnter} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2">
               See it in action <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -138,14 +135,13 @@ function AboutPage() {
 }
 
 /* ─── PRICING PAGE ───────────────────────────────────────────── */
-function PricingPage() {
-  const navigate = useNavigate()
+function PricingPage({ onBack, onEnter }) {
   const [annual, setAnnual] = useState(true)
   const plans = [
     {
       name: 'Starter', price: 0, period: 'Free forever',
       desc: 'For individuals and small teams exploring AI security.',
-      features: ['Up to 5 OAuth apps', 'Basic threat feed', '7-day event history', 'Community support'],
+      features: ['Up to 5 OAuth apps', 'Basic threat feed', '7-day event history', 'Community support', 'Demo mode'],
       cta: 'Get started free', highlighted: false,
     },
     {
@@ -164,22 +160,22 @@ function PricingPage() {
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans">
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-800/60 bg-[#09090b]/90 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <button onClick={() => navigate('/')} className="flex items-center gap-2.5">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          <button onClick={onBack} className="flex items-center gap-2.5">
             <Shield className="w-6 h-6 text-blue-500" />
             <span className="font-semibold text-zinc-100 tracking-tight">ContextGuard</span>
           </button>
-          <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-sm lg:text-base bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
+          <button onClick={onEnter} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
         </div>
       </header>
-      <div className="pt-24 md:pt-28 pb-16 md:pb-20 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto">
-          <button onClick={() => navigate('/')} className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors mb-8 md:mb-10">
+      <div className="pt-28 pb-20 px-6">
+        <div className="max-w-5xl mx-auto">
+          <button onClick={onBack} className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors mb-10">
             <ChevronRight className="w-4 h-4 rotate-180" /> Back to home
           </button>
-          <div className="text-center mb-10 md:mb-14">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-zinc-100 mb-4">Simple, transparent pricing</h1>
-            <p className="text-base md:text-lg text-zinc-400 mb-8">Start free. Scale as your security needs grow.</p>
+          <div className="text-center mb-14">
+            <h1 className="text-4xl font-bold text-zinc-100 mb-4">Simple, transparent pricing</h1>
+            <p className="text-zinc-400 mb-8">Start free. Scale as your security needs grow.</p>
             <div className="inline-flex items-center gap-0 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
               <button onClick={() => setAnnual(false)} className={`px-4 py-2 text-sm rounded-md transition-colors ${!annual ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>Monthly</button>
               <button onClick={() => setAnnual(true)} className={`px-4 py-2 text-sm rounded-md transition-colors flex items-center gap-2 ${annual ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'}`}>
@@ -210,7 +206,7 @@ function PricingPage() {
                     </li>
                   ))}
                 </ul>
-                <button onClick={() => navigate('/dashboard')} className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${plan.highlighted ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700'}`}>
+                <button onClick={onEnter} className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${plan.highlighted ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700'}`}>
                   {plan.cta}
                 </button>
               </div>
@@ -220,10 +216,10 @@ function PricingPage() {
             <h2 className="text-2xl font-bold text-zinc-100 mb-8 text-center">Frequently asked questions</h2>
             <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
               {[
-                { q: 'Do I need to change my code?', a: 'No. ContextGuard works in the background without changing anything.' },
-                { q: 'Is my data safe?', a: 'Yes. We only check data in memory and never save it to disks.' },
-                { q: 'Which AI platforms work with this?', a: 'Any AI platform like ChatGPT, Google Gemini, or Claude.' },
-                { q: 'Can I install this on my own servers?', a: 'Yes. Enterprise plans allow you to host it completely on your own machines.' },
+                { q: 'Do you require code changes to deploy?', a: 'No. ContextGuard deploys as a transparent proxy. No changes to your AI agents or integrations.' },
+                { q: 'Is my data stored or logged?', a: 'Metadata only. Prompt content is inspected in memory and never persisted to disk or third parties.' },
+                { q: 'What AI providers are supported?', a: 'Any provider routed through the Lobster Trap proxy — OpenAI, Anthropic, Google, and custom endpoints.' },
+                { q: 'Can I self-host ContextGuard?', a: 'Yes. Enterprise plans include on-premise deployment with full support.' },
               ].map(item => (
                 <div key={item.q} className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/40">
                   <h4 className="font-semibold text-zinc-200 mb-2 text-sm">{item.q}</h4>
@@ -240,26 +236,33 @@ function PricingPage() {
 }
 
 /* ─── LANDING PAGE ───────────────────────────────────────────── */
-function LandingPage() {
-  const navigate = useNavigate()
+function LandingPage({ onEnterDashboard, onConnectWorkspace }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState('home')
+
+  if (currentPage === 'about') return <AboutPage onBack={() => setCurrentPage('home')} onEnter={onEnterDashboard} />
+  if (currentPage === 'pricing') return <PricingPage onBack={() => setCurrentPage('home')} onEnter={onEnterDashboard} />
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans">
       {/* Navbar */}
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-800/60 bg-[#09090b]/90 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Shield className="w-6 h-6 text-blue-500" />
             <span className="font-semibold text-zinc-100 tracking-tight">ContextGuard</span>
           </div>
           <nav className="hidden md:flex items-center gap-1">
-            <button onClick={() => navigate('/')} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors rounded-md hover:bg-zinc-800/50">Product</button>
-            <button onClick={() => navigate('/about')} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors rounded-md hover:bg-zinc-800/50">About</button>
-            <button onClick={() => navigate('/pricing')} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors rounded-md hover:bg-zinc-800/50">Pricing</button>
+            {[{ label: 'Product', page: null }, { label: 'About', page: 'about' }, { label: 'Pricing', page: 'pricing' }, { label: 'Docs', page: null }].map(link => (
+              <button key={link.label} onClick={() => link.page && setCurrentPage(link.page)}
+                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors rounded-md hover:bg-zinc-800/50">
+                {link.label}
+              </button>
+            ))}
           </nav>
           <div className="hidden md:flex items-center gap-3">
-            <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-sm lg:text-base lg:px-6 lg:py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
+            <button onClick={onEnterDashboard} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors">Demo</button>
+            <button onClick={onConnectWorkspace} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Get started</button>
           </div>
           <button className="md:hidden p-2 text-zinc-400" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -267,79 +270,85 @@ function LandingPage() {
         </div>
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-zinc-800 bg-[#09090b] px-6 py-4 space-y-1">
-            <button onClick={() => navigate('/about')} className="block w-full text-left px-3 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 rounded-md">About</button>
-            <button onClick={() => navigate('/pricing')} className="block w-full text-left px-3 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 rounded-md">Pricing</button>
+            {[{ label: 'About', page: 'about' }, { label: 'Pricing', page: 'pricing' }].map(link => (
+              <button key={link.label} onClick={() => { setCurrentPage(link.page); setMobileMenuOpen(false) }}
+                className="block w-full text-left px-3 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 rounded-md">{link.label}</button>
+            ))}
             <div className="pt-3 flex flex-col gap-2">
-              <button onClick={() => navigate('/dashboard')} className="px-4 py-2.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium">Open Dashboard</button>
+              <button onClick={onEnterDashboard} className="px-4 py-2.5 text-sm text-zinc-100 border border-zinc-700 rounded-lg">Demo</button>
+              <button onClick={onConnectWorkspace} className="px-4 py-2.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium">Get started</button>
             </div>
           </div>
         )}
       </header>
 
       {/* Hero */}
-      <section className="pt-32 pb-20 md:pt-40 md:pb-28 lg:pt-48 lg:pb-36 px-4 sm:px-6 text-center relative overflow-hidden">
+      <section className="pt-36 pb-24 px-6 text-center relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] md:w-[600px] md:h-[600px] bg-blue-600/8 blur-[100px] md:blur-[140px] rounded-full" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/8 blur-[140px] rounded-full" />
         </div>
-        <div className="max-w-4xl lg:max-w-5xl mx-auto relative">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-700/60 rounded-full text-xs sm:text-sm text-zinc-400 mb-6 md:mb-8">
+        <div className="max-w-3xl mx-auto relative">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-700/60 rounded-full text-xs text-zinc-400 mb-8">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Protected by Smart AI Security
+            Now with Gemini-powered threat intelligence
           </div>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-zinc-100 tracking-tight leading-tight mb-4 md:mb-6">
-            Simple Security for<br className="hidden sm:block" /><span className="text-blue-400"> Your Workspace</span>
+          <h1 className="text-5xl md:text-6xl font-bold text-zinc-100 tracking-tight leading-tight mb-6">
+            AI Security for<br /><span className="text-blue-400">Enterprise Workspaces</span>
           </h1>
-          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-zinc-400 leading-relaxed max-w-2xl lg:max-w-3xl mx-auto mb-8 md:mb-10">
-            ContextGuard checks your Google Workspace and protects your company from bad AI apps easily and safely.
+          <p className="text-lg text-zinc-400 leading-relaxed max-w-2xl mx-auto mb-10">
+            ContextGuard monitors, inspects, and shields your organization from third-party AI supply-chain attacks — in real time.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-            <button onClick={() => navigate('/dashboard')} className="w-full sm:w-auto px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-base sm:text-lg transition-colors flex items-center justify-center gap-2">
-              <Lock className="w-5 h-5" /> Open Dashboard
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button onClick={onEnterDashboard} className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+              Explore Demo <ArrowRight className="w-4 h-4" />
+            </button>
+            <button onClick={onConnectWorkspace} className="w-full sm:w-auto px-6 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-200 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+              <Lock className="w-4 h-4" /> Connect Workspace
             </button>
           </div>
-          <p className="mt-6 text-xs text-zinc-500">No credit card required · Safe & Secure · AI-Powered</p>
+          <p className="mt-6 text-xs text-zinc-500">No credit card required · SOC2 Ready · AI-Powered</p>
         </div>
       </section>
 
       {/* Stats */}
-      <section className="border-y border-zinc-800/60 bg-zinc-900/30 py-8 md:py-12 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 text-center">
+      <section className="border-y border-zinc-800/60 bg-zinc-900/30 py-8 px-6">
+        <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           {[
-            { value: '99.9%', label: 'Threats Blocked' },
-            { value: '<2ms', label: 'Fast Checking' },
-            { value: '500+', label: 'Security Rules' },
-            { value: 'SOC2', label: 'Safe & Secure' },
+            { value: '99.9%', label: 'Threat detection rate' },
+            { value: '<2ms', label: 'DPI latency overhead' },
+            { value: '500+', label: 'Policy rules built-in' },
+            { value: 'SOC2', label: 'Compliance ready' },
           ].map(s => (
-            <div key={s.label} className="p-2">
-              <div className="text-3xl md:text-4xl lg:text-5xl font-bold text-zinc-100 mb-1 md:mb-2">{s.value}</div>
-              <div className="text-xs sm:text-sm md:text-base text-zinc-500">{s.label}</div>
+            <div key={s.label}>
+              <div className="text-2xl font-bold text-zinc-100 mb-1">{s.value}</div>
+              <div className="text-xs text-zinc-500">{s.label}</div>
             </div>
           ))}
         </div>
       </section>
 
       {/* Features */}
-      <section className="py-20 md:py-32 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12 md:mb-20">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-zinc-100 mb-4 md:mb-6">Everything you need to stay safe</h2>
-            <p className="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto">A complete tool to watch your apps, stop bad attacks, and fix problems across your whole team.</p>
+      <section className="py-24 px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-zinc-100 mb-4">Everything you need to secure AI</h2>
+            <p className="text-zinc-400 max-w-xl mx-auto">A complete platform for monitoring AI agents, detecting threats, and responding to incidents across your entire organization.</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid md:grid-cols-3 gap-4">
             {[
-              { icon: Activity, title: 'Live Alerts', desc: 'See every blocked attack easily as it happens.' },
-              { icon: AppWindow, title: 'App Checker', desc: 'Find out which connected apps are unsafe and asking for too much.' },
-              { icon: FileKey, title: 'Secret Guard', desc: 'Protect your passwords and API keys from leaking.' },
-              { icon: Crosshair, title: 'Attack Tester', desc: 'Test your system safely with fake attacks to see if it works.' },
-              { icon: ShieldAlert, title: 'Fix Problems', desc: 'Get easy steps to solve any security problem in one click.' },
-              { icon: BarChart3, title: 'Simple Reports', desc: 'Get easy-to-read PDF reports created by AI.' },
+              { icon: Activity, title: 'Live Threat Feed', desc: 'Real-time DPI interception and classification of malicious AI traffic with severity scoring.' },
+              { icon: AppWindow, title: 'OAuth App Scanner', desc: 'Continuously audit all third-party OAuth integrations for excessive permissions and supply-chain risk.' },
+              { icon: FileKey, title: 'Env Variable Guardian', desc: 'AI-powered classification of environment variables to prevent credential leakage.' },
+              { icon: Crosshair, title: 'Red Team Simulator', desc: 'Test your defenses with realistic prompt injection and jailbreak attack simulations.' },
+              { icon: ShieldAlert, title: 'Incident Response', desc: 'Structured playbooks with 1-click remediation for every security incident.' },
+              { icon: BarChart3, title: 'Compliance Reports', desc: 'Generate SOC2 and HIPAA-ready audit reports powered by Gemini intelligence.' },
             ].map(f => (
-              <div key={f.title} className="p-6 md:p-8 rounded-2xl border border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all group">
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mb-4 md:mb-6 group-hover:bg-blue-600/20 transition-colors">
-                  <f.icon className="w-5 h-5 md:w-6 md:h-6 text-blue-400" />
+              <div key={f.title} className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/70 transition-all group">
+                <div className="w-9 h-9 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mb-4 group-hover:bg-blue-600/20 transition-colors">
+                  <f.icon className="w-5 h-5 text-blue-400" />
                 </div>
-                <h3 className="text-lg md:text-xl font-semibold text-zinc-100 mb-2 md:mb-3">{f.title}</h3>
-                <p className="text-sm md:text-base text-zinc-500 leading-relaxed">{f.desc}</p>
+                <h3 className="font-semibold text-zinc-100 mb-2">{f.title}</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -347,22 +356,22 @@ function LandingPage() {
       </section>
 
       {/* How it works */}
-      <section className="py-20 md:py-28 px-4 sm:px-6 border-t border-zinc-800/60 bg-zinc-900/20">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12 md:mb-16">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-zinc-100 mb-4">How ContextGuard works</h2>
-            <p className="text-base md:text-lg text-zinc-400">Deployed as a transparent proxy between your AI agents and external services.</p>
+      <section className="py-20 px-6 border-t border-zinc-800/60 bg-zinc-900/20">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-bold text-zinc-100 mb-4">How ContextGuard works</h2>
+            <p className="text-zinc-400">Deployed as a transparent proxy between your AI agents and external services.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 md:gap-12">
+          <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: '01', title: 'Connect your workspace', desc: 'Just sign in with Google Workspace. No code changes required.' },
-              { step: '02', title: 'We watch in the background', desc: 'Our engine checks all app requests quietly and safely.' },
-              { step: '03', title: 'Bad apps are blocked', desc: 'Harmful actions are stopped instantly, and you get alerted.' },
+              { step: '01', title: 'Connect your workspace', desc: 'OAuth integration with Google Workspace. Zero config, no code changes required.' },
+              { step: '02', title: 'Proxy routes traffic', desc: 'Lobster Trap DPI engine inspects all AI agent requests in real time.' },
+              { step: '03', title: 'Threats blocked instantly', desc: 'Malicious prompts blocked, incidents logged, and teams notified automatically.' },
             ].map(s => (
-              <div key={s.step} className="text-center md:text-left">
-                <div className="text-5xl md:text-6xl lg:text-7xl font-bold text-zinc-800 mb-4 md:mb-6 font-mono">{s.step}</div>
-                <h3 className="text-xl md:text-2xl font-semibold text-zinc-100 mb-2 md:mb-3">{s.title}</h3>
-                <p className="text-sm md:text-base text-zinc-500 leading-relaxed">{s.desc}</p>
+              <div key={s.step}>
+                <div className="text-5xl font-bold text-zinc-800 mb-4 font-mono">{s.step}</div>
+                <h3 className="font-semibold text-zinc-100 mb-2">{s.title}</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">{s.desc}</p>
               </div>
             ))}
           </div>
@@ -370,70 +379,43 @@ function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-20 md:py-32 px-4 sm:px-6 text-center">
-        <div className="max-w-2xl mx-auto">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-zinc-100 mb-4 md:mb-6">Ready to make your team safe?</h2>
-          <p className="text-base md:text-lg text-zinc-400 mb-8 md:mb-10">Join other teams who trust ContextGuard to keep their tools safe.</p>
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-            <button onClick={() => navigate('/dashboard')} className="px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-base sm:text-lg transition-colors flex items-center justify-center gap-2">
-              Open Dashboard <ArrowRight className="w-5 h-5" />
+      <section className="py-20 px-6 text-center">
+        <div className="max-w-xl mx-auto">
+          <h2 className="text-3xl font-bold text-zinc-100 mb-4">Ready to secure your AI stack?</h2>
+          <p className="text-zinc-400 mb-8">Join security teams who trust ContextGuard to protect their AI-powered workflows.</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button onClick={onEnterDashboard} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+              Try Demo Dashboard <ArrowRight className="w-4 h-4" />
             </button>
-            <button onClick={() => navigate('/pricing')} className="px-6 py-3 sm:px-8 sm:py-4 border border-zinc-700 hover:border-zinc-500 text-zinc-200 rounded-lg font-medium text-base sm:text-lg transition-colors">
+            <button onClick={() => setCurrentPage('pricing')} className="px-6 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-200 rounded-lg font-medium transition-colors">
               View Pricing
             </button>
           </div>
         </div>
       </section>
 
-      <Footer />
+      <Footer onNavigate={setCurrentPage} />
     </div>
   )
 }
 
 /* ─── NOTIFICATIONS DROPDOWN ─────────────────────────────────── */
-// Converts a real DPI event from /api/events into a notification shape
-function eventToNotification(event, idx) {
-  const sevToType = { CRITICAL: 'critical', HIGH: 'warning', MEDIUM: 'info', LOW: 'info' }
-  const ago = (ts) => {
-    const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
-    if (diff < 60) return `${diff}s ago`
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return `${Math.floor(diff / 86400)}d ago`
-  }
-  return {
-    id: event.id || idx,
-    type: sevToType[event.severity] || 'info',
-    title: event.policy_triggered || 'DPI Event',
-    desc: event.alert_message || 'Threat intercepted by Lobster Trap.',
-    time: ago(event.timestamp),
-    read: false,
-  }
-}
+const DEMO_NOTIFICATIONS = [
+  { id: 1, type: 'critical', title: 'Prompt Injection Detected', desc: 'Malicious payload blocked in OAuth app "DataSync Pro"', time: '2m ago', read: false },
+  { id: 2, type: 'warning', title: 'Excessive OAuth Scope', desc: 'App "TaskBot" requested write access to Gmail', time: '18m ago', read: false },
+  { id: 3, type: 'info', title: 'Red Team Simulation Complete', desc: 'Jailbreak test finished — 3 vectors blocked, 0 bypassed', time: '1h ago', read: true },
+  { id: 4, type: 'info', title: 'Env Variable Scan Done', desc: '12 variables classified, 1 flagged as high-risk', time: '3h ago', read: true },
+  { id: 5, type: 'critical', title: 'PII Exfiltration Attempt', desc: 'Agent tried to send email addresses to external endpoint', time: '5h ago', read: true },
+]
 
 function NotificationsDropdown({ onClose }) {
-  const [notifications, setNotifications] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [notifications, setNotifications] = useState(DEMO_NOTIFICATIONS)
   const unread = notifications.filter(n => !n.read).length
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await axios.get(`${API}/api/events?hours=24`)
-        const events = (res.data.events || []).slice(0, 8)
-        setNotifications(events.map((e, i) => eventToNotification(e, i)))
-      } catch {
-        setNotifications([])
-      }
-      setLoading(false)
-    }
-    load()
-  }, [])
 
   const typeStyles = {
     critical: 'bg-rose-500/10 border-rose-500/20 text-rose-400',
-    warning:  'bg-amber-500/10 border-amber-500/20 text-amber-400',
-    info:     'bg-blue-500/10 border-blue-500/20 text-blue-400',
+    warning: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+    info: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
   }
 
   const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
@@ -445,16 +427,10 @@ function NotificationsDropdown({ onClose }) {
           <span className="text-sm font-semibold text-zinc-100">Notifications</span>
           {unread > 0 && <span className="px-1.5 py-0.5 text-xs bg-rose-500 text-white rounded-full font-medium">{unread}</span>}
         </div>
-        {unread > 0 && <button onClick={markAllRead} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Mark all read</button>}
+        <button onClick={markAllRead} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Mark all read</button>
       </div>
       <div className="max-h-80 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
-          </div>
-        ) : notifications.length === 0 ? (
-          <p className="text-center text-xs text-zinc-600 py-8">No events in the last 24 hours.</p>
-        ) : notifications.map(n => (
+        {notifications.map(n => (
           <button key={n.id} onClick={() => setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
             className={`w-full text-left px-4 py-3 border-b border-zinc-800/60 hover:bg-zinc-800/30 transition-colors ${!n.read ? 'bg-zinc-800/20' : ''}`}>
             <div className="flex items-start gap-3">
@@ -470,7 +446,7 @@ function NotificationsDropdown({ onClose }) {
         ))}
       </div>
       <div className="px-4 py-2.5 border-t border-zinc-800 text-center">
-        <button onClick={onClose} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">View all in Threat Feed</button>
+        <button onClick={onClose} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">View all in Incident Feed</button>
       </div>
     </div>
   )
@@ -496,13 +472,13 @@ function ProfileDropdown({ onDisconnect, onClose, wsConnected, systemStatus }) {
               {wsConnected ? systemStatus?.workspace?.admin_email?.split('@')[0] : 'Demo User'}
             </p>
             <p className="text-xs text-zinc-500 truncate">
-              {wsConnected ? systemStatus?.workspace?.admin_email : 'Demo Mode'}
+              {wsConnected ? systemStatus?.workspace?.admin_email : 'demo@contextguard.ai'}
             </p>
           </div>
         </div>
         <div className={`mt-3 flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 border ${wsConnected ? 'bg-emerald-500/10 border-emerald-900/60 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
           <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-          {wsConnected ? 'Workspace connected' : 'Not connected'}
+          {wsConnected ? 'Workspace connected' : 'Demo mode active'}
         </div>
       </div>
       <div className="py-1">
@@ -525,15 +501,12 @@ function ProfileDropdown({ onDisconnect, onClose, wsConnected, systemStatus }) {
   )
 }
 
-/* ─── DASHBOARD ────────────────────────────────────────────────── */
-function Dashboard() {
-  const { tab } = useParams()
-  const navigate = useNavigate()
-  const activeTab = tab || 'threats'
-  const setActiveTab = (newTab) => navigate(`/dashboard/${newTab}`)
-  
+/* ─── MAIN APP ───────────────────────────────────────────────── */
+export default function App() {
+  const [activeTab, setActiveTab] = useState('threats')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [systemStatus, setSystemStatus] = useState(null)
+  const [showLanding, setShowLanding] = useState(true)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
 
@@ -566,9 +539,9 @@ function Dashboard() {
   const handleDisconnect = async () => {
     try {
       await axios.post(`${API}/api/workspace/disconnect`)
-      setSystemStatus(prev => ({ ...prev, workspace: { ...prev.workspace, connected: false } }))
+      setSystemStatus(prev => ({ ...prev, workspace: { ...prev.workspace, connected: false, mode: 'synthetic_demo' } }))
     } catch (e) { console.error('Failed to disconnect', e) }
-    navigate('/')
+    setShowLanding(true)
   }
 
   const TABS = [
@@ -579,12 +552,7 @@ function Dashboard() {
     { id: 'response', label: 'Incidents', icon: ShieldAlert },
   ]
 
-  if (!TABS.find(t => t.id === activeTab)) {
-    return <Navigate to="/dashboard/threats" replace />
-  }
-
   const renderContent = () => {
-
     switch (activeTab) {
       case 'threats': return <ThreatFeed />
       case 'apps': return <OAuthApps />
@@ -598,22 +566,12 @@ function Dashboard() {
   const wsConnected = systemStatus?.workspace?.connected
   const proxyOnline = systemStatus?.proxy?.online
 
-  if (systemStatus === null) {
+  if (showLanding) {
     return (
-      <div className="flex h-screen bg-[#09090b] items-center justify-center">
-        <div className="flex flex-col items-center">
-          <div className="w-8 h-8 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4" />
-          <p className="text-zinc-500 text-sm font-medium animate-pulse">Initializing Security Engine...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!wsConnected) {
-    return (
-      <div className="h-screen w-screen bg-[#09090b] overflow-hidden relative">
-        <OAuthApps />
-      </div>
+      <LandingPage
+        onEnterDashboard={() => setShowLanding(false)}
+        onConnectWorkspace={() => { setShowLanding(false); setActiveTab('apps') }}
+      />
     )
   }
 
@@ -645,7 +603,7 @@ function Dashboard() {
             <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-1 mb-2">System</p>
             <div className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 border ${wsConnected ? 'bg-emerald-500/8 border-emerald-900/60 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
               <Database className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate">{wsConnected ? systemStatus.workspace.admin_email : 'Not connected'}</span>
+              <span className="truncate">{wsConnected ? systemStatus.workspace.admin_email : 'Demo mode'}</span>
             </div>
             <div className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 border ${proxyOnline ? 'bg-emerald-500/8 border-emerald-900/60 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
               {proxyOnline ? <Wifi className="w-3 h-3 flex-shrink-0" /> : <WifiOff className="w-3 h-3 flex-shrink-0" />}
@@ -677,7 +635,7 @@ function Dashboard() {
             {systemStatus ? (
               <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border text-xs font-medium ${wsConnected ? 'bg-emerald-500/10 border-emerald-900/60 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                {wsConnected ? `${systemStatus.workspace.apps_in_db} apps` : 'Not connected'}
+                {wsConnected ? `${systemStatus.workspace.apps_in_db} apps` : 'Demo'}
               </div>
             ) : (
               <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-1">
@@ -715,25 +673,11 @@ function Dashboard() {
         </header>
 
         <main className="flex-1 overflow-y-auto bg-[#09090b]">
-          <div className="max-w-[1600px] 2xl:max-w-none mx-auto p-4 sm:p-6 lg:p-8">
+          <div className="max-w-[1400px] mx-auto p-6">
             {renderContent()}
           </div>
         </main>
       </div>
     </div>
-  )
-}
-
-/* ─── MAIN APP ROUTES ────────────────────────────────────────── */
-export default function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/about" element={<AboutPage />} />
-      <Route path="/pricing" element={<PricingPage />} />
-      <Route path="/dashboard" element={<Navigate to="/dashboard/threats" replace />} />
-      <Route path="/dashboard/:tab" element={<Dashboard />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
   )
 }

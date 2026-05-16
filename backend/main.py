@@ -19,6 +19,9 @@ import logging
 import os
 import re
 import threading
+import subprocess
+import sys
+from pathlib import Path
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
@@ -142,15 +145,92 @@ def _start_scan_scheduler():
     logger.info("OAuth scan scheduler started (every %s hours)", SCAN_INTERVAL_HOURS)
 
 
+# ═══════════════════════════════════════════
+# LOBSTER TRAP AUTO-LAUNCH (FR-4.1)
+# ═══════════════════════════════════════════
+
+_lobster_proc = None
+_bridge_proc   = None
+
+
+def _launch_lobster_trap():
+    """
+    FR-4.1: Auto-start lobstertrap.exe + webhook_bridge.py as background processes.
+    Skipped gracefully if binary not found (e.g. CI / non-Windows environments).
+    """
+    global _lobster_proc, _bridge_proc
+
+    # Resolve paths relative to this file's location
+    backend_dir = Path(__file__).parent
+    lobster_dir = backend_dir.parent / "lobster"
+    binary      = lobster_dir / "lobstertrap.exe"
+    policy      = lobster_dir / "configs" / "default_policy.yaml"
+    audit_log   = lobster_dir / "lobster_audit.jsonl"
+    bridge      = lobster_dir / "webhook_bridge.py"
+
+    if not binary.exists():
+        logger.warning(
+            "FR-4.1: lobstertrap.exe not found at %s — skipping auto-launch. "
+            "Start Lobster Trap manually if needed.",
+            binary,
+        )
+        return
+
+    try:
+        # Start the proxy
+        _lobster_proc = subprocess.Popen(
+            [
+                str(binary), "serve",
+                "--policy",     str(policy),
+                "--listen",     ":8080",
+                "--audit-log",  str(audit_log),
+            ],
+            cwd=str(lobster_dir),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logger.info("Lobster Trap proxy started (PID %d) on :8080", _lobster_proc.pid)
+    except Exception as e:
+        logger.error("Failed to start lobstertrap.exe: %s", e)
+        return
+
+    if not bridge.exists():
+        logger.warning("webhook_bridge.py not found at %s — skipping.", bridge)
+        return
+
+    try:
+        # Give the binary a moment to initialize before starting the bridge
+        time.sleep(1.5)
+        _bridge_proc = subprocess.Popen(
+            [sys.executable, str(bridge), "--log-file", str(audit_log)],
+            cwd=str(lobster_dir),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logger.info("Webhook bridge started (PID %d)", _bridge_proc.pid)
+    except Exception as e:
+        logger.error("Failed to start webhook_bridge.py: %s", e)
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """Gracefully terminate Lobster Trap sub-processes on server shutdown."""
+    for proc, name in ((_lobster_proc, "lobstertrap"), (_bridge_proc, "webhook_bridge")):
+        if proc and proc.poll() is None:
+            proc.terminate()
+            logger.info("%s terminated (PID %d)", name, proc.pid)
+
+
 @app.on_event("startup")
 def startup_event():
     """Initialize database on server startup."""
     init_db()
-    
-    # If in synthetic mode, ensure the DB is empty so the user starts with a clean slate
-    if os.getenv("OAUTH_USE_SYNTHETIC", "").lower() in ("1", "true", "yes"):
-        clear_oauth_apps()
-        logger.info("Cleared existing apps for clean Demo Mode (empty state)")
+
+    # FR-4.1: Auto-launch Lobster Trap proxy + webhook bridge
+    if os.getenv("DISABLE_LOBSTER_AUTOLAUNCH", "").lower() not in ("1", "true"):
+        threading.Thread(target=_launch_lobster_trap, daemon=True, name="lobster-launcher").start()
+    else:
+        logger.info("FR-4.1: Lobster Trap auto-launch disabled by DISABLE_LOBSTER_AUTOLAUNCH env var")
 
     _start_scan_scheduler()
     logger.info("ContextGuard API started on :3000")
@@ -952,11 +1032,9 @@ def system_status():
 
     creds_path = os.getenv("GOOGLE_WORKSPACE_CREDS", "")
     admin_email = os.getenv("GOOGLE_ADMIN_EMAIL", "")
-    use_synthetic = os.getenv("OAUTH_USE_SYNTHETIC", "true").lower() in ("1", "true", "yes")
 
     workspace_connected = (
-        not use_synthetic
-        and bool(creds_path)
+        bool(creds_path)
         and os.path.exists(creds_path)
         and bool(admin_email)
     )
@@ -974,7 +1052,7 @@ def system_status():
         "workspace": {
             "connected": workspace_connected,
             "admin_email": admin_email if workspace_connected else None,
-            "mode": "synthetic_demo" if use_synthetic else "real_workspace",
+            "mode": "real_workspace",
             "apps_in_db": len(apps),
         },
         "proxy": {
@@ -988,14 +1066,16 @@ def system_status():
 
 @app.post("/api/workspace/disconnect")
 def disconnect_workspace():
-    """Reset to synthetic demo mode and clear real workspace data."""
+    """Clear real workspace data."""
     import dotenv
     env_file = os.path.join(os.path.dirname(__file__), ".env")
-    dotenv.set_key(env_file, "OAUTH_USE_SYNTHETIC", "true")
-    os.environ["OAUTH_USE_SYNTHETIC"] = "true"
-    clear_oauth_apps()
-    save_audit_log("admin", "workspace_disconnected", "workspace", "Switched back to synthetic demo mode")
-    return {"status": "disconnected", "mode": "synthetic_demo"}
+    dotenv.set_key(env_file, "GOOGLE_WORKSPACE_CREDS", "")
+    dotenv.set_key(env_file, "GOOGLE_ADMIN_EMAIL", "")
+    os.environ.pop("GOOGLE_WORKSPACE_CREDS", None)
+    from database import clear_all_workspace_data, save_audit_log
+    clear_all_workspace_data()
+    save_audit_log("admin", "workspace_disconnected", "workspace", "Disconnected workspace and wiped local data")
+    return {"status": "disconnected"}
 
 # ──────────────────────────────────────────
 # Frontend Serving (React build)
@@ -1039,18 +1119,6 @@ if __name__ == "__main__":
     print("✨ Starting React Frontend (Vite) in background...")
     frontend_process = subprocess.Popen("npm run dev", cwd=frontend_dir, shell=True)
     
-    lobster_dir = os.path.join(os.path.dirname(__file__), "..", "lobster")
-    lobster_process = None
-    webhook_process = None
-    
-    if os.path.exists(os.path.join(lobster_dir, "lobstertrap.exe")):
-        print("🦞 Starting Lobster Trap DPI Proxy in background...")
-        lobster_cmd = r".\lobstertrap.exe serve --policy configs/default_policy.yaml --backend https://api.openai.com --listen :8080 --audit-log lobster_audit.jsonl"
-        lobster_process = subprocess.Popen(lobster_cmd, cwd=lobster_dir, shell=True)
-        
-        print("🌉 Starting Webhook Bridge in background...")
-        webhook_process = subprocess.Popen("python webhook_bridge.py --log-file lobster_audit.jsonl", cwd=lobster_dir, shell=True)
-    
     print("🛡️ Starting FastAPI Backend...")
     print("👉 Dashboard will be available at: http://localhost:5173")
     print("👉 API Backend running at: http://localhost:3000")
@@ -1064,9 +1132,5 @@ if __name__ == "__main__":
     finally:
         print("\n🛑 Shutting down ContextGuard...")
         frontend_process.terminate()
-        if lobster_process:
-            lobster_process.terminate()
-        if webhook_process:
-            webhook_process.terminate()
         sys.exit(0)
 

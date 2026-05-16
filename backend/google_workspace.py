@@ -13,25 +13,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/admin.directory.user.security",
 ]
 
-SYNTHETIC_APPS_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "demo", "synthetic_apps.json"
-)
 
-
-def _load_synthetic_apps() -> list:
-    """SRS §10.1: Demo fallback when Workspace admin credentials unavailable."""
-    if not os.path.exists(SYNTHETIC_APPS_PATH):
-        logger.warning("Synthetic apps file not found: %s", SYNTHETIC_APPS_PATH)
-        return []
-    with open(SYNTHETIC_APPS_PATH, encoding="utf-8") as f:
-        apps = json.load(f)
-    now = datetime.now(timezone.utc).isoformat()
-    for app in apps:
-        app.setdefault("publisher", "Demo Publisher")
-        app.setdefault("last_active", app.get("last_active", now))
-        app.setdefault("declared_scopes", app.get("declared_scopes", app.get("scopes", [])))
-    logger.info("Loaded %d synthetic OAuth apps for demo", len(apps))
-    return apps
 
 
 def _scan_workspace_api() -> list:
@@ -99,14 +81,8 @@ def _scan_workspace_api() -> list:
 
 def scan_oauth_apps() -> list:
     """
-    FR-1.1: Enumerate OAuth apps — Workspace API or synthetic demo data.
+    FR-1.1: Enumerate OAuth apps — Workspace API.
     """
-    use_synthetic = os.getenv("OAUTH_USE_SYNTHETIC", "").lower() in ("1", "true", "yes")
-
-    if use_synthetic:
-        # If no workspace is connected, return an empty list as requested by the user
-        return []
-
     try:
         return _scan_workspace_api()
     except Exception as e:

@@ -266,6 +266,32 @@ def clear_oauth_apps():
     conn.close()
 
 
+def clear_all_workspace_data():
+    """Wipe all sensitive data when the workspace is disconnected."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    tables_to_clear = [
+        "oauth_apps",
+        "risk_score_history",
+        "dpi_events",
+        "incidents",
+        "env_variables",
+        "env_alerts",
+        "redteam_runs",
+        "oauth_app_snapshots",
+        "agent_baselines",
+        "rotation_tickets"
+    ]
+    
+    for table in tables_to_clear:
+        cursor.execute(f"DELETE FROM {table}")
+        
+    conn.commit()
+    conn.close()
+
+
+
 def get_apps() -> list:
     """Return all scanned OAuth apps with current risk scores."""
     conn = get_connection()

@@ -49,9 +49,9 @@ export default function IncidentResponse() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-4">
+    <div className="flex h-[calc(100vh-8rem)] gap-4">
       {/* Incident List */}
-      <div className="w-full lg:w-80 flex-shrink-0 border border-zinc-800 rounded-xl flex flex-col overflow-hidden bg-zinc-900/40 max-h-[40vh] lg:max-h-none">
+      <div className="w-72 flex-shrink-0 border border-zinc-800 rounded-xl flex flex-col overflow-hidden bg-zinc-900/40">
         <div className="px-4 py-3 border-b border-zinc-800">
           <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
             <AlertOctagon className="w-4 h-4 text-rose-400" />

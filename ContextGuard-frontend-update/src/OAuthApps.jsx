@@ -102,58 +102,53 @@ export default function OAuthApps() {
     }
   }
 
-  const isDisconnected = systemStatus && !systemStatus.workspace?.connected;
-
   return (
-    <div className={isDisconnected ? "h-full w-full flex items-center justify-center bg-[#09090b] px-4" : "space-y-8"}>
-      {!isDisconnected && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gradient-to-r from-zinc-900 to-zinc-900/20 p-6 rounded-2xl border border-zinc-800 backdrop-blur-md shadow-lg">
-          <div className="mb-4 sm:mb-0">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-zinc-100 tracking-tight">OAuth Attack Surface</h2>
-            <p className="text-sm sm:text-base text-zinc-400 mt-1 sm:mt-2">Continuous monitoring of third-party connected applications in Google Workspace.</p>
-          </div>
-          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-            <button
-              onClick={() => setShowConnectModal(true)}
-              className="flex items-center justify-center space-x-2 bg-zinc-800 hover:bg-zinc-700 px-6 py-3 rounded-xl text-sm font-bold transition-all border border-zinc-700 text-white"
-            >
-              <Settings className="w-5 h-5" /><span>Connect Workspace</span>
-            </button>
-            {systemStatus?.workspace?.connected && (
-              <button
-                onClick={handleDisconnect}
-                className="flex items-center justify-center space-x-2 bg-zinc-800 hover:bg-rose-900/50 px-4 py-3 rounded-xl text-sm font-bold transition-all border border-zinc-700 hover:border-rose-500/50 hover:text-rose-400 text-zinc-300"
-                title="Disconnect Workspace"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            )}
-            <button
-              onClick={triggerScan}
-              disabled={scanning}
-              className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:shadow-[0_0_25px_rgba(37,99,235,0.6)] text-white"
-            >
-              {scanning ? (
-                <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div><span>Running Deep Scan...</span></>
-              ) : (
-                <><Search className="w-5 h-5" /><span>Scan Environment</span></>
-              )}
-            </button>
-          </div>
+    <div className="space-y-8">
+      {/* Header & Actions */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gradient-to-r from-zinc-900 to-zinc-900/20 p-6 rounded-2xl border border-zinc-800 backdrop-blur-md shadow-lg">
+        <div className="mb-4 sm:mb-0">
+          <h2 className="text-2xl font-black text-zinc-100 tracking-tight">OAuth Attack Surface</h2>
+          <p className="text-sm text-zinc-400 mt-1">Continuous monitoring of third-party connected applications in Google Workspace.</p>
         </div>
-      )}
+        <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
+          <button
+            onClick={() => setShowConnectModal(true)}
+            className="flex items-center justify-center space-x-2 bg-zinc-800 hover:bg-zinc-700 px-6 py-3 rounded-xl text-sm font-bold transition-all border border-zinc-700 text-white"
+          >
+            <Settings className="w-5 h-5" /><span>Connect Workspace</span>
+          </button>
+          {systemStatus?.workspace?.connected && (
+            <button
+              onClick={handleDisconnect}
+              className="flex items-center justify-center space-x-2 bg-zinc-800 hover:bg-rose-900/50 px-4 py-3 rounded-xl text-sm font-bold transition-all border border-zinc-700 hover:border-rose-500/50 hover:text-rose-400 text-zinc-300"
+              title="Disconnect and return to demo mode"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          )}
+          <button
+            onClick={triggerScan}
+            disabled={scanning}
+            className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:shadow-[0_0_25px_rgba(37,99,235,0.6)] text-white"
+          >
+            {scanning ? (
+              <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div><span>Running Deep Scan...</span></>
+            ) : (
+              <><Search className="w-5 h-5" /><span>Scan Environment</span></>
+            )}
+          </button>
+        </div>
+      </div>
 
       {/* Connect Modal */}
-      {(showConnectModal || isDisconnected) && (
-        <div className={isDisconnected ? "w-full max-w-md" : "fixed inset-0 z-50 flex items-center justify-center bg-[#09090b]/90 backdrop-blur-sm px-4"}>
-          <div className="bg-[#0f1117] border border-zinc-800 p-8 rounded-2xl shadow-2xl shadow-black w-full">
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 p-6 rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-white tracking-tight">Connect Workspace</h3>
-              {systemStatus?.workspace?.connected && (
-                <button onClick={() => setShowConnectModal(false)} className="text-zinc-500 hover:text-white transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              )}
+              <h3 className="text-xl font-bold text-white">Connect Workspace</h3>
+              <button onClick={() => setShowConnectModal(false)} className="text-zinc-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <form onSubmit={handleConnect} className="space-y-4">
               <div>
@@ -191,8 +186,7 @@ export default function OAuthApps() {
 
 
       {/* App Grid */}
-      {!isDisconnected && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {apps.length === 0 ? (
           <div className="col-span-full py-16 text-center text-zinc-500 border border-zinc-800 border-dashed rounded-2xl bg-zinc-900/20">
             <Shield className="w-16 h-16 mx-auto mb-4 opacity-20" />
@@ -245,7 +239,6 @@ export default function OAuthApps() {
           })
         )}
       </div>
-      )}
     </div>
   )
 }

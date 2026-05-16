@@ -6,6 +6,8 @@ python-dotenv
 pydantic
 aiohttp
 requests
+google-api-python-client
+google-auth
 
 # Development & Testing
 pytest
