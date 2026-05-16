@@ -36,7 +36,9 @@
     "name": "QuickAI Assistant",
     "publisher": "Unknown Publisher",
     "scopes": ["admin_sdk", "manage_users", "read_email", "write_email", "read_drive", "write_drive"],
+    "declared_scopes": ["read_email", "read_drive"],
     "user_count": 2,
+    "last_active": "2026-05-14T08:00:00Z",
     "is_ioc": false
   },
   {
@@ -60,7 +62,9 @@
     "name": "SmartDesk AI",
     "publisher": "SmartDesk Corp.",
     "scopes": ["admin_sdk", "read_email", "write_email", "manage_users", "read_drive"],
+    "declared_scopes": ["read_email"],
     "user_count": 1,
+    "last_active": "2026-05-13T22:15:00Z",
     "is_ioc": false
   },
   {

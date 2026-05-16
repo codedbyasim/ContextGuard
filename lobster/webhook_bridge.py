@@ -144,6 +144,20 @@ def build_webhook_payload(entry: dict) -> dict:
         if field in raw_metadata:
             webhook_metadata[field] = raw_metadata[field]
 
+    # FR-4.4: declared intent from agent headers / Lobster Trap audit
+    declared_headers = entry.get("declared_headers")
+    if declared_headers:
+        webhook_metadata["declared_headers"] = declared_headers
+        if isinstance(declared_headers, dict):
+            for hk in ("intent", "X-Lobstertrap-Intent", "x-lobstertrap-intent"):
+                if declared_headers.get(hk):
+                    webhook_metadata["declared_intent"] = declared_headers[hk]
+                    break
+
+    mismatches = entry.get("mismatches")
+    if mismatches:
+        webhook_metadata["mismatches"] = mismatches
+
     # Include top-level fields
     webhook_metadata["token_count"] = entry.get("token_count", raw_metadata.get("token_count", 0))
     webhook_metadata["direction"] = entry.get("direction", "unknown")

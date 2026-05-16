@@ -123,6 +123,27 @@ ingress_rules:
         match_type: boolean
         value: true
 
+  # Rule 6b: INTENT MISMATCH → HUMAN_REVIEW (SRS policy pack)
+  # Proxy flags intent_category vs declared header; backend confirms with Gemini.
+  - name: intent_mismatch
+    description: "Declared agent intent differs from detected intent — requires human review"
+    priority: 75
+    action: HUMAN_REVIEW
+    conditions:
+      - field: intent_mismatch
+        match_type: boolean
+        value: true
+
+  # Rule 6c: RATE LIMIT ANOMALY → RATE_LIMIT (SRS policy pack)
+  - name: rate_limit_anomaly
+    description: "Call volume exceeds rolling baseline threshold"
+    priority: 72
+    action: RATE_LIMIT
+    conditions:
+      - field: rate_limit_exceeded
+        match_type: boolean
+        value: true
+
   # Rule 7: HIGH RISK SCORE → HUMAN_REVIEW
   - name: high_risk_review
     description: "High risk score requires human review"

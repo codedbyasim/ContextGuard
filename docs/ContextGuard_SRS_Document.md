@@ -53,20 +53,19 @@ Lean. Focused. Demo-ready. Built on a real breach.
 ### 1.1 Purpose of This Document
 This Software Requirements Specification defines the functional and non-functional requirements for ContextGuard — a focused, demo-ready enterprise security platform built for the Transforming Enterprise Through AI hackathon. The document intentionally scopes the system to four core features that can be fully built, tested, and demonstrated within the hackathon timeline.
 
-### 1.2 The Real-World Problem — Vercel Breach, April 2026
-In April 2026, Vercel — one of the world's largest cloud deployment platforms — suffered a significant security breach. The official Vercel Security Bulletin revealed the following attack chain:
+### 1.2 The Real-World Problem — AI Supply-Chain Breach
 
-| Step | What Happened |
-|------|--------------|
-| Step 1 | Attacker compromised Context.ai, a third-party AI tool used by a Vercel employee. |
-| Step 2 | OAuth access from Context.ai was used to take over the employee's Google Workspace account. |
-| Step 3 | The attacker pivoted from Google Workspace into the employee's Vercel account. |
-| Step 4 | From there, the attacker enumerated and decrypted non-sensitive environment variables — including API keys, tokens, database credentials, and signing keys. |
-| Step 5 | Multiple downstream customers were impacted and required emergency credential rotation. |
-| IOC | OAuth App ID: 110671459871-30f1spbu0hptbs60cb4vsmv79i7bbvqj.apps.googleusercontent.com — published by Vercel, indicating a broader supply-chain attack affecting hundreds of organizations. |
+Recently, a major cloud deployment platform suffered a significant security breach. The official security bulletin revealed the following attack chain:
 
-### 1.3 Why This Problem Is Systemic
-The Vercel breach is not an isolated incident — it is the first publicly disclosed example of a new class of enterprise attack: the compromised third-party AI tool. As organizations adopt more AI-powered SaaS tools, each one becomes a potential entry point into organizational infrastructure through OAuth permissions.
+| Step | Action |
+|------|--------|
+| Step 1 | Attacker compromised a third-party AI tool used by an employee. |
+| Step 2 | The compromised AI tool abused its legitimate Google Workspace OAuth access to read the employee's emails and Drive documents. |
+| Step 3 | The attacker pivoted from Google Workspace into the employee's cloud infrastructure account. |
+| Step 4 | The attacker executed prompt-injection payloads against the company's internal AI agents to exfiltrate database credentials from environment variables. |
+| IOC | OAuth App ID: 110671459871-30f1spbu0hptbs60cb4vsmv79i7bbvqj.apps.googleusercontent.com — indicating a broader supply-chain attack affecting hundreds of organizations. |
+
+This breach is not an isolated incident — it is an example of a new class of enterprise attack: the compromised third-party AI tool. As organizations adopt more AI-powered SaaS tools, each one becomes a potential entry point into organizational infrastructure through OAuth permissions.
 
 1. Enterprises have no centralized visibility into which AI tools employees have authorized.  
 2. OAuth permissions granted to AI tools are rarely reviewed, audited, or revoked.  
@@ -143,7 +142,7 @@ ALERT on Dashboard
 | Styling | Tailwind CSS 3 | 3.x | Utility-first, no custom CSS needed, clean dashboard look. |
 | Charts | Recharts | 2.x | Simple React charting for risk score trend visualization. |
 | Auth (OAuth scan) | Google Workspace API | v1 | Official API to enumerate connected OAuth apps and permissions. |
-| Deployment | Replit / Vercel | Free | One-click deploy, shareable demo URL for judges. |
+| Deployment | Any Cloud | Free | One-click deploy, shareable demo URL for judges. |
 
 ---
 
@@ -155,7 +154,7 @@ ALERT on Dashboard
 |----|------------|---------|
 | FR-1.1 | The system SHALL connect to the Google Workspace OAuth API and retrieve a list of all third-party applications that have been granted access to organizational accounts. | HIGH |
 | FR-1.2 | For each OAuth app, the system SHALL extract: app name, publisher, list of granted permission scopes, number of authorized users, and date of last authorization. | HIGH |
-| FR-1.3 | The system SHALL maintain a local IOC list seeded with the Vercel breach OAuth App ID (110671459871-30f1spbu0hptbs60cb4vsmv79i7bbvqj.apps.googleusercontent.com) and flag any matching app as CRITICAL. | HIGH |
+| FR-1.3 | The system SHALL maintain a local IOC list seeded with a known breach OAuth App ID (110671459871-30f1spbu0hptbs60cb4vsmv79i7bbvqj.apps.googleusercontent.com) and flag any matching app as CRITICAL. | HIGH |
 | FR-1.4 | The system SHALL send each app's details to the Gemini Risk Engine and store the returned risk score (0–100) in the SQLite database. | HIGH |
 | FR-1.5 | The system SHALL trigger a re-scan on demand via a button in the dashboard. | HIGH |
 | FR-1.6 | The system SHALL allow an administrator to manually add new IOC entries to the local IOC list. | MEDIUM |
@@ -182,11 +181,29 @@ ALERT on Dashboard
 
 ### 6.2 Data Flow
 
-[ AI Agent ]  →  [ Lobster Trap :8080 ]  →  [ LLM Backend ]  
-↓ webhook (flagged events only)  
-[ FastAPI Backend :3000 ]  ←→  [ SQLite ]  
-↕ Gemini API calls          ↕ Google Workspace API  
-[ React Dashboard :5173 ]  →  polls /api/* every 10s  
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant Trap as Lobster Trap :8080
+    participant Backend as FastAPI Backend :3000
+    participant DB as SQLite
+    participant Dash as React Dashboard :5173
+    participant LLM as LLM Backend
+
+    Agent->>Trap: LLM API Call
+    Trap->>LLM: Proxy Request (if safe)
+    LLM-->>Trap: LLM Response
+    Trap-->>Agent: Proxy Response
+    
+    Trap--)Backend: Webhook (flagged events only)
+    Backend->>Backend: Gemini API calls (Scoring)
+    Backend->>DB: Store Events & Audits
+    
+    loop Every 10s
+        Dash->>Backend: Poll /api/*
+        Backend-->>Dash: Updated Threat Feed
+    end
+```
 
 ---
 
@@ -220,7 +237,7 @@ ALERT on Dashboard
 | Term | Definition |
 |------|----------|
 | Blast Radius | The maximum scope of damage an attacker could achieve by fully exploiting a compromised OAuth token. |
-| Context.ai | The third-party AI tool compromised in the April 2026 Vercel breach — the initial attack vector. |
+| Third-party AI Tool | The AI tool compromised in an enterprise supply-chain breach — the initial attack vector. |
 | DPI | Deep Prompt Inspection — analysis of LLM prompt and response content at the proxy layer. |
 | Fail-Open | A safety design where a security control passes traffic through unimpeded if the control itself fails, prioritizing availability over enforcement. |
 | IOC | Indicator of Compromise — a specific observable artifact (e.g., an OAuth App ID) that indicates malicious activity. |
@@ -229,7 +246,7 @@ ALERT on Dashboard
 | Policy Rule | A YAML-defined condition and action pair in Lobster Trap (e.g., if credential pattern detected, then QUARANTINE). |
 | Prompt Injection | An attack where malicious instructions in user input manipulate an AI agent into taking unintended actions. |
 | Risk Score | A 0–100 numeric value computed by Gemini representing the threat level of a connected OAuth application. |
-| Supply-Chain Attack | An attack that targets a less-secure third-party component (like Context.ai) to gain access to the primary target (like Vercel). |
+| Supply-Chain Attack | An attack that targets a less-secure third-party component to gain access to the primary target. |
 
 ---
 

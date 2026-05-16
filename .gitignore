@@ -16,6 +16,8 @@ htmlcov/
 .env
 *.env
 !.env.example
+workspace_creds.json
+midyear-castle-*.json
 
 # Database
 *.db

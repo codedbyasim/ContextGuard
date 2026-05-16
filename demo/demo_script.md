@@ -13,7 +13,7 @@ Owner: Tayyab
 ## Demo Flow (5 minutes)
 
 ### Part 1 — The Problem (30 seconds)
-> "In April 2026, Vercel was breached through a third-party AI tool called Context.ai.
+> "Recently, a major cloud provider was breached through a third-party AI tool called Context.ai. 
 > The attacker used OAuth access to steal credentials and decrypt production secrets.
 > ContextGuard would have caught this. Let me show you."
 
@@ -21,7 +21,7 @@ Owner: Tayyab
 1. Click 'Scan OAuth Apps Now'
 2. Point to Context.ai — highlight the CRITICAL score and IOC badge
 3. Point to 'SmartDesk AI' — unknown publisher, admin-level scopes, HIGH risk
-> "We found the exact OAuth app from the Vercel breach — flagged CRITICAL immediately."
+> "We found the exact OAuth app from the breach — flagged CRITICAL immediately."
 
 ### Part 3 — Live Threat Detection (2 minutes)
 Open a new terminal and run:
@@ -43,7 +43,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 ### Part 5 — Wrap Up (30 seconds)
 > "ContextGuard: OAuth risk scanning, real-time DPI enforcement via Lobster Trap,
 > Gemini-powered intelligence, all in one dashboard.
-> Built directly on the attack vector that breached Vercel."
+> Built directly on the attack vector that caused the breach."
 
 ---
 
