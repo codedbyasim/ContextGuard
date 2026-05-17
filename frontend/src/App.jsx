@@ -541,12 +541,6 @@ function NotificationsDropdown({ onClose }) {
 
 /* ─── PROFILE DROPDOWN ───────────────────────────────────────── */
 function ProfileDropdown({ onDisconnect, onSignOut, onClose, wsConnected, systemStatus, user }) {
-  const menuItems = [
-    { label: 'Dashboard', icon: Shield, action: onClose },
-    { label: 'Settings', icon: Lock, action: onClose },
-    { label: 'Documentation', icon: ExternalLink, action: onClose },
-    { label: 'Support', icon: Users, action: onClose },
-  ]
   return (
     <div className="absolute right-0 top-full mt-2 w-60 bg-[#0f1117] border border-zinc-800 rounded-xl shadow-2xl shadow-black/40 z-50 overflow-hidden">
       <div className="px-4 py-3 border-b border-zinc-800">
@@ -569,15 +563,6 @@ function ProfileDropdown({ onDisconnect, onSignOut, onClose, wsConnected, system
         </div>
       </div>
       <div className="py-1">
-        {menuItems.map(item => (
-          <button key={item.label} onClick={item.action}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50 transition-colors">
-            <item.icon className="w-4 h-4 flex-shrink-0" />
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="border-t border-zinc-800 py-1">
         <button onClick={onSignOut}
           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50 transition-colors">
           <LogOut className="w-4 h-4 flex-shrink-0" />

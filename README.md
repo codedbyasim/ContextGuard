@@ -57,11 +57,11 @@ graph TD
 
     subgraph SecurityCore["CONTEXTGUARD SECURE RUNTIME"]
         Backend["FastAPI Backend Engine (:3000)<br/>(Asymmetric JWKS middleware, Threat pipeline)"]:::server
-        InMem["In-Memory Credentials Parser<br/>(Service Account Info Dictionary)"]:::server
+        InMem["Volatile In-Memory State<br/>(RAM-Only Ephemeral SA Credentials)"]:::server
     end
 
     subgraph CloudInfra["SECURE CLOUD PLATFORM"]
-        DB[(Supabase PostgreSQL Pool)<br/>• system_config table<br/>• oauth_apps & audit_log]:::database
+        DB[(Supabase PostgreSQL Pool)<br/>• oauth_apps & audit_log]:::database
         Auth["Supabase Auth Gateway<br/>(Asymmetric ES256 OIDC)"]:::database
     end
 
@@ -79,9 +79,8 @@ graph TD
     
     Backend -->|Verify ES256 signatures| Auth
     Backend -->|SSL Connection Pool| DB
-    Backend -->|Fetch / Save configs| DB
     
-    Backend -->|Retrieve parsed JSON dict| InMem
+    Backend -->|Store & Load Ephemeral RAM State| InMem
     InMem -->|Authenticate directly in-memory| Workspace
     
     Backend -->|Generate threat intel & reports| Gemini
@@ -178,8 +177,10 @@ GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_USE_NATIVE=false
 ```
 
-> [!NOTE]
-> **Google Workspace credentials are 100% database-driven!** You do not need to configure any workspace path or admin emails inside your `.env` file anymore. Simply open your dashboard, go to the **OAuth Apps** page, click **Connect Workspace**, and upload your JSON credentials securely directly from the UI! The credentials will reside safe and secure inside your Supabase DB.
+> [!IMPORTANT]
+> **Zero-Persistence Ephemeral Credentials Mode Active!** To guarantee military-grade security, Google Workspace credentials are **never** stored in the database, `.env`, or the local filesystem. They reside strictly inside the backend's volatile RAM.
+> 
+> Simply open your dashboard, go to the **OAuth Apps** page, click **Connect Workspace**, and upload your JSON credentials directly from the UI. The credentials exist strictly during active runtime: if you disconnect, log out, or log back in, they are immediately and automatically wiped from memory forever!
 
 > **Never commit your root `.env` file** — it contains active production secrets. It is automatically blocked from Git commits by our project `.gitignore` rules.
 

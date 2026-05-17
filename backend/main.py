@@ -190,6 +190,15 @@ class AuthResponse(BaseModel):
 @app.get("/api/auth/me")
 def auth_me(request: Request):
     user = get_current_user(request)
+    
+    # Wipe Workspace credentials if session has changed or a different user loaded
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.active_user_id != user["id"]:
+        WORKSPACE_STATE.creds_json = None
+        WORKSPACE_STATE.admin_email = None
+        WORKSPACE_STATE.use_synthetic = True
+        WORKSPACE_STATE.active_user_id = user["id"]
+
     if AUTH_DISABLED:
         return {"id": 0, "email": "dev@local", "name": "Dev", "auth_disabled": True}
     return {"id": user["id"], "email": user["email"], "name": user["name"]}
@@ -198,6 +207,11 @@ def auth_me(request: Request):
 @app.post("/api/auth/logout")
 def logout_user(request: Request):
     user = get_current_user(request)
+    from google_workspace import WORKSPACE_STATE
+    WORKSPACE_STATE.creds_json = None
+    WORKSPACE_STATE.admin_email = None
+    WORKSPACE_STATE.use_synthetic = True
+    WORKSPACE_STATE.active_user_id = None
     save_audit_log(user.get("email", "unknown"), "user_logout", "auth", "Dashboard logout")
     return {"status": "ok"}
 
@@ -442,6 +456,10 @@ def root():
 @app.get("/api/apps")
 def list_apps():
     """Return all scanned OAuth apps with current risk scores."""
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        return {"apps": [], "count": 0}
+
     apps = get_apps()
     save_audit_log("api", "list_apps", "oauth_apps", f"Returned {len(apps)} apps")
     return {"apps": apps, "count": len(apps)}
@@ -457,13 +475,15 @@ def trigger_scan():
 
 
 @app.post("/api/workspace/connect")
-def connect_workspace(payload: WorkspaceConnectRequest):
+def connect_workspace(payload: WorkspaceConnectRequest, request: Request):
     """Dynamically connect a Google Workspace."""
-    from database import set_system_config
+    user = get_current_user(request)
+    from google_workspace import WORKSPACE_STATE
     
-    set_system_config("google_workspace_creds", payload.creds_json)
-    set_system_config("google_admin_email", payload.admin_email)
-    set_system_config("oauth_use_synthetic", "false")
+    WORKSPACE_STATE.creds_json = payload.creds_json
+    WORKSPACE_STATE.admin_email = payload.admin_email
+    WORKSPACE_STATE.use_synthetic = False
+    WORKSPACE_STATE.active_user_id = user["id"]
     
     # Clear out dummy/synthetic data so the new workspace shows actual state
     clear_oauth_apps()
@@ -808,8 +828,9 @@ def get_compliance_report():
     SRS FR: Compliance report generation < 15 seconds.
     """
     logger.info("Generating compliance report")
+    from google_workspace import WORKSPACE_STATE
     events = get_events(hours=24)
-    apps = get_apps()
+    apps = [] if WORKSPACE_STATE.use_synthetic else get_apps()
 
     # Prepare events for Gemini (strip raw metadata to save tokens)
     simplified_events = []
@@ -887,7 +908,8 @@ def get_stats():
     Dashboard statistics for the frontend.
     Returns aggregated counts for display.
     """
-    apps = get_apps()
+    from google_workspace import WORKSPACE_STATE
+    apps = [] if WORKSPACE_STATE.use_synthetic else get_apps()
     events = get_events(hours=24)
     severity_counts = get_event_count_by_severity()
 
@@ -1110,27 +1132,10 @@ def modules_status():
 def system_status():
     """Real-time health check: workspace connection, proxy, DB."""
     import requests as req
-    from database import get_system_config
+    from google_workspace import WORKSPACE_STATE
 
-    creds_path = os.getenv("GOOGLE_WORKSPACE_CREDS", "")
-    admin_email = os.getenv("GOOGLE_ADMIN_EMAIL", "") or get_system_config("google_admin_email")
-    creds_json = get_system_config("google_workspace_creds")
-
-    resolved_path = creds_path
-    if creds_path and not os.path.isabs(creds_path):
-        possible_paths = [
-            os.path.abspath(creds_path),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), creds_path)),
-            os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), creds_path))
-        ]
-        for p in possible_paths:
-            if os.path.exists(p):
-                resolved_path = p
-                break
-
-    workspace_connected = (
-        bool(creds_json) or (bool(creds_path) and os.path.exists(resolved_path))
-    ) and bool(admin_email)
+    workspace_connected = not WORKSPACE_STATE.use_synthetic and bool(WORKSPACE_STATE.creds_json) and bool(WORKSPACE_STATE.admin_email)
+    admin_email = WORKSPACE_STATE.admin_email if workspace_connected else None
 
     proxy_url = os.getenv("PROXY_URL", "http://localhost:8080")
     proxy_online = False
@@ -1140,11 +1145,11 @@ def system_status():
     except Exception:
         proxy_online = False
 
-    apps = get_apps()
+    apps = [] if WORKSPACE_STATE.use_synthetic else get_apps()
     return {
         "workspace": {
             "connected": workspace_connected,
-            "admin_email": admin_email if workspace_connected else None,
+            "admin_email": admin_email,
             "mode": "real_workspace",
             "apps_in_db": len(apps),
         },
@@ -1158,16 +1163,19 @@ def system_status():
 
 
 @app.post("/api/workspace/disconnect")
-def disconnect_workspace():
+def disconnect_workspace(request: Request):
     """Clear real workspace data."""
-    from database import delete_system_config, set_system_config, clear_all_workspace_data, save_audit_log
+    user = get_current_user(request)
+    from google_workspace import WORKSPACE_STATE
     
-    delete_system_config("google_workspace_creds")
-    delete_system_config("google_admin_email")
-    set_system_config("oauth_use_synthetic", "true")
+    WORKSPACE_STATE.creds_json = None
+    WORKSPACE_STATE.admin_email = None
+    WORKSPACE_STATE.use_synthetic = True
+    WORKSPACE_STATE.active_user_id = None
     
+    from database import clear_all_workspace_data, save_audit_log
     clear_all_workspace_data()
-    save_audit_log("admin", "workspace_disconnected", "workspace", "Disconnected workspace and wiped credentials from database")
+    save_audit_log(user.get("email", "unknown"), "workspace_disconnected", "workspace", "Disconnected workspace and wiped credentials from memory")
     return {"status": "disconnected"}
 
 # ──────────────────────────────────────────
