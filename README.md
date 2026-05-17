@@ -49,12 +49,10 @@ flowchart TD
         ProxyNote["• Credential pattern matching\n• Prompt injection detection\n• PII scanning\n• Intent mismatch detection"]
         
         Backend["FastAPI Backend :3000"]
-        BackendNote["• Gemini 2.5 Pro Classification\n• OAuth risk scoring\n• Env variable guardian\n• Incident response engine\n• Immutable audit log"]
-        
-        DB[("SQLite\nDatabase")]
+        BackendNote["• Gemini 2.5 Pro Classification\n• OAuth risk scoring\n• Env variable guardian\n• Incident response engine\n• Immutable audit log\n• Self-healing thread pool"]
         
         UI["React Dashboard :5173"]
-        UINote["• Threat Feed\n• OAuth Apps audit\n• Env Guardian\n• Red-Team Simulator\n• Incident Response"]
+        UINote["• Threat Feed\n• OAuth Apps audit\n• Env Guardian\n• Red-Team Simulator\n• Incident Response\n• Glassmorphic Signup/Login"]
         
         Tools --> Proxy
         Proxy --- ProxyNote
@@ -62,22 +60,33 @@ flowchart TD
         Proxy -- "Webhook Events" --> Backend
         Backend --- BackendNote
         
-        Backend --> DB
         Backend --> UI
         UI --- UINote
     end
+
+    subgraph Cloud["SUPABASE SECURE CLOUD"]
+        DB[("PostgreSQL\nDatabase Pool")]
+        AuthGateway["Supabase Auth\n(Asymmetric ES256 JWKS)"]
+    end
+
+    Backend -- "SSL Connection Pool" --> DB
+    Backend -- "OpenID Key Discovery" --> AuthGateway
+    UI -- "Asymmetric Auth" --> AuthGateway
 
     classDef default fill:#f8fafc,stroke:#e2e8f0,stroke-width:2px,color:#1e293b;
     classDef highlight fill:#eff6ff,stroke:#bfdbfe,stroke-width:2px,color:#1d4ed8;
     classDef alert fill:#fff1f2,stroke:#fecdd3,stroke-width:2px,color:#be123c;
     classDef proxy fill:#fffbeb,stroke:#fef3c7,stroke-width:2px,color:#b45309;
     classDef bg fill:#ffffff,stroke:#f1f5f9,stroke-width:2px,color:#334155;
+    classDef cloud fill:#f0fdf4,stroke:#bbf7d0,stroke-width:2px,color:#15803d;
     
     class Proxy proxy;
     class Backend highlight;
-    class DB default;
+    class DB cloud;
+    class AuthGateway cloud;
     class UI highlight;
     class Enterprise bg;
+    class Cloud bg;
 ```
 
 ---
@@ -115,72 +124,82 @@ Explore the detailed architecture and requirements of ContextGuard:
 | Node.js | 18+ | Frontend build |
 | Google Gemini API Key | Any | AI risk classification |
 | Google Workspace Admin SDK | v1 | OAuth app enumeration (optional) |
+| Supabase PostgreSQL | v15+ | Production cloud telemetry data |
 
-### 1 — Clone & Install
+### 1 — Clone & Unified Setup
+
+Clone the project and initialize your global Python virtual environment:
 
 ```bash
 git clone https://github.com/codedbyasim/ContextGuard.git
 cd ContextGuard
 
-# Install backend dependencies
-cd backend
+# Initialize Python Virtual Environment
 python -m venv venv
 
-# Windows
-.\venv\Scripts\activate
-# Linux/Mac
+# Windows Activation
+.\venv\Scripts\Activate.ps1
+# Linux/Mac Activation
 # source venv/bin/activate
 
-pip install -r requirements.txt
+# Install backend dependencies
+pip install -r backend/requirements.txt
 ```
 
-*(Note: You do NOT need to install frontend dependencies manually. The backend will automatically build the React app for you!)*
+### 2 — Configure Unified Environment
 
-### 2 — Configure Environment
+ContextGuard uses a **single, unified `.env` file at the project root** to keep frontend, backend, and database configurations perfectly synchronized. 
 
-Copy the template and edit `backend/.env`:
-
-```bash
-cp backend/.env.example backend/.env
-```
+Create a `.env` file at the root (`ContextGuard/.env`) and define your keys:
 
 ```env
-# Required
+# =========================================================================
+# CONTEXTGUARD UNIFIED CONFIGURATION (.env)
+# =========================================================================
+
+# Dashboard Authentication (Supports dynamic ES256 Asymmetric JWKS)
+DASHBOARD_PASSWORD=your_dashboard_password_here
+JWT_SECRET_KEY=generate_a_long_cryptographic_secret_here
+
+# Supabase Production PostgreSQL Database Pool
+DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require
+
+# Frontend Cloud Gateway Integration
+VITE_SUPABASE_URL=https://<your_supabase_project>.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_public_key_here
+
+# Gemini AI Engine Scaffold
 GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_USE_NATIVE=false
 
-# Dashboard authentication (required for login/signup)
-JWT_SECRET_KEY=change-this-to-a-long-random-secret-in-production
-JWT_EXPIRE_HOURS=168
-AUTH_DISABLED=false
-
-# Google Workspace (for real OAuth scanning)
-GOOGLE_WORKSPACE_CREDS=path/to/service_account.json
+# Google Workspace Discovery (Service Account Integration)
 GOOGLE_ADMIN_EMAIL=admin@yourcompany.com
-
-# Set to true for demo mode (synthetic apps), false for real workspace
-OAUTH_USE_SYNTHETIC=true
+GOOGLE_WORKSPACE_CREDS=D:\Absolute\Path\To\backend\workspace_creds.json
+OAUTH_USE_SYNTHETIC=false
 ```
 
-> **Never commit `backend/.env`** — it contains secrets. Use `backend/.env.example` as the template only.
+> **Never commit your root `.env` file** — it contains active production secrets. It is automatically blocked from Git commits by our project `.gitignore` rules.
 
 ### 3 — Run ContextGuard
 
-Thanks to the unified application architecture, you only need one command!
+Open two separate terminals at the project root:
 
-**Terminal 1 — Main Server:**
+**Terminal 1 — API Backend Server:**
 ```bash
-cd backend
-python main.py
+# Ensure venv is active
+python backend/main.py
 ```
-*This command will automatically install frontend packages, build the Vite React app, start the frontend dev server, run the FastAPI backend, AND spawn the Lobster Trap DPI Proxy with its webhook bridge — all in one terminal window.*
+*Loads variables from `../.env` automatically, starts the FastAPI gateway, boots up the Veea Lobster Trap DPI connection, and initializes a self-healing Supabase database connection pool.*
 
-| Service | URL |
-|---------|-----|
-| **Dashboard (dev)** | http://localhost:5173 |
-| **Sign up** | http://localhost:5173/signup |
-| **Sign in** | http://localhost:5173/login |
-| **API backend** | http://localhost:3000 |
-| **DPI proxy** (optional) | http://localhost:8080 |
+**Terminal 2 — React Frontend Dev Server:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*Fires up Vite which automatically pulls configuration from the root `.env` via `envDir` redirection, mounting the beautiful glassmorphic UI.*
+
+---
 
 ### 4 — Create your account
 
@@ -190,24 +209,9 @@ The dashboard is **restricted to registered users**:
 2. Sign in at http://localhost:5173/login.
 3. Open the dashboard at http://localhost:5173/dashboard/threats.
 
-All API calls from the dashboard send `Authorization: Bearer <token>`. Unauthenticated requests to `/api/*` return **401**, except:
+All API calls from the dashboard send `Authorization: Bearer <token>`. Unauthenticated requests to `/api/*` return **401**, except public register, login, and Lobster Trap webhook endpoints.
 
-- `POST /api/auth/register` and `POST /api/auth/login` (public)
-- `POST /api/webhook/lobster` (Lobster Trap webhook — no token)
-
-**Reset local users** (e.g. after testing):
-
-```bash
-cd backend
-python scripts/reset_users.py
-```
-
-**Alternative — two terminals (development):**
-
-```bash
-# Terminal 1 — API
-cd backend
-uvicorn main:app --host 0.0.0.0 --port 3000 --reload
+---.0.0.0 --port 3000 --reload
 
 # Terminal 2 — Frontend
 cd frontend
@@ -413,12 +417,11 @@ Click "Scan System Env Vars" → System scans all OS environment variables
 
 ```
 contextguard/
+├── .env                      # Unified project-level configuration (Root)
 ├── backend/
 │   ├── main.py               # FastAPI app — all API endpoints + auth middleware
-│   ├── auth.py               # JWT + bcrypt password hashing
-│   ├── database.py           # SQLite layer — all data access functions
-│   ├── scripts/
-│   │   └── reset_users.py    # Clear dashboard users (local dev)
+│   ├── auth.py               # Dynamic asymmetric ES256 JWKS jwt resolver
+│   ├── database.py           # Supabase PostgreSQL threaded connection pool
 │   ├── gemini.py             # Gemini AI integration — risk scoring, reports
 │   ├── google_workspace.py   # Google Workspace Admin SDK — OAuth enumeration
 │   ├── oauth_scanner.py      # OAuth scan pipeline — score + save apps
@@ -428,10 +431,10 @@ contextguard/
 │   ├── behavior.py           # Agent behavioral baseline tracking
 │   ├── incident_response.py  # Incident workflow engine
 │   ├── modules_status.py     # SRS module implementation status
-│   ├── test_attacks.py       # CLI prompt injection tester
-│   └── data/
-│       └── contextguard.db   # SQLite database
+│   └── test_attacks.py       # CLI prompt injection tester
+├── dev_archive/              # Development scripts, database migrations & SQL blueprints
 ├── frontend/
+│   ├── vite.config.js        # Configured with envDir pointing to root .env
 │   └── src/
 │       ├── App.jsx            # Routes, dashboard shell, marketing pages
 │       ├── auth.jsx           # AuthProvider, axios token interceptors
@@ -442,7 +445,7 @@ contextguard/
 │       ├── RedTeamSimulator.jsx # Live prompt tester + attack simulation
 │       └── IncidentResponse.jsx # Incident tracking + remediation
 ├── lobster/
-│   ├── lobstertrap.exe        # Place binary here (build separately — see lobster/README.md)
+│   ├── lobstertrap.exe        # Active Go-based transparent DPI binary
 │   ├── webhook_bridge.py      # Log-tailing bridge → FastAPI webhook
 │   └── configs/
 │       └── default_policy.yaml # DPI policy rules
@@ -472,7 +475,7 @@ contextguard/
 
 ## Tech Stack
 
-**Backend:** Python 3.11 · FastAPI · SQLite · PyJWT · bcrypt · google-api-python-client · google-generativeai · python-dotenv
+**Backend:** Python 3.11 · FastAPI · Supabase PostgreSQL Pool (`psycopg2`) · Asymmetric JWT OpenID Connect (`ES256` key server discovery) · google-api-python-client · google-generativeai · python-dotenv
 
 **Frontend:** React 18 · Vite · React Router · Axios · Tailwind CSS · Lucide Icons
 
@@ -480,7 +483,7 @@ contextguard/
 
 **Security:** Veea Lobster Trap (DPI proxy) · SHA-256 prompt hashing · PII redaction
 
-**Integrations:** Google Workspace Admin SDK · Google Drive API · Google OAuth 2.0
+**Integrations:** Google Workspace Admin SDK · Google Drive API · Google OAuth 2.0 · Supabase Auth Gateway
 
 ---
 

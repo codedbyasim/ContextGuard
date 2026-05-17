@@ -8,30 +8,67 @@ Tables:
   ioc_list    → Known malicious OAuth app IDs
 """
 
-import sqlite3
+import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
+import psycopg2.extras
+import os
+from dotenv import load_dotenv
+# Search for unified root .env first, then local .env
+_env_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+if os.path.exists(_env_file):
+    load_dotenv(_env_file)
+else:
+    load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), ".env")))
 import os
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "data", "contextguard.db")
+DB_URL = os.getenv("DATABASE_URL", "")
 
-
+pool = None
 def get_connection():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    global pool
+    if pool is None:
+        if not DB_URL:
+            raise ValueError("DATABASE_URL is not set.")
+        # Thread-safe pool with min 2 and max 20 connections
+        pool = ThreadedConnectionPool(2, 20, DB_URL)
+    
+    # Attempt to retrieve a healthy connection (up to 3 retries)
+    for i in range(3):
+        conn = pool.getconn()
+        try:
+            # Execute a fast, lightweight ping query to verify SSL/TCP connection status
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            return conn
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            print(f"⚠️ [DATABASE] Discarding stale/dead connection from pool (Attempt {i+1}/3): {e}")
+            try:
+                # Permanently close and discard the dead connection so the pool is cleaned
+                pool.putconn(conn, close=True)
+            except Exception:
+                pass
+                
+    # Final fallback if all pool connections are dead: get a brand new one
+    return pool.getconn()
 
+def release_connection(conn):
+    if pool and conn:
+        try:
+            pool.putconn(conn)
+        except Exception:
+            pass
 
 def init_db():
     """Create all tables if they don't exist. Call on startup."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-    cursor.executescript("""
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS oauth_apps (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             app_id          TEXT UNIQUE NOT NULL,
             name            TEXT NOT NULL,
             publisher       TEXT,
@@ -47,7 +84,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS risk_score_history (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             app_id          TEXT NOT NULL,
             risk_score      INTEGER NOT NULL,
             risk_category   TEXT,
@@ -57,7 +94,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS dpi_events (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             timestamp       TEXT NOT NULL,
             policy_triggered TEXT NOT NULL,
             action_taken    TEXT NOT NULL,
@@ -69,7 +106,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS audit_log (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             timestamp       TEXT NOT NULL,
             actor           TEXT,
             action          TEXT NOT NULL,
@@ -78,7 +115,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS ioc_list (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             app_client_id   TEXT UNIQUE NOT NULL,
             source          TEXT,
             severity        TEXT DEFAULT 'CRITICAL',
@@ -87,7 +124,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS oauth_whitelist (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             app_client_id   TEXT UNIQUE NOT NULL,
             reason          TEXT,
             added_by        TEXT DEFAULT 'admin',
@@ -95,7 +132,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS env_variables (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             var_name        TEXT UNIQUE NOT NULL,
             classification  TEXT DEFAULT 'NON-SENSITIVE',
             value_hash      TEXT,
@@ -106,7 +143,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS env_alerts (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             var_name        TEXT NOT NULL,
             severity        TEXT NOT NULL,
             message         TEXT,
@@ -117,7 +154,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS incidents (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             event_id        INTEGER,
             workflow_key    TEXT,
             title           TEXT,
@@ -132,7 +169,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS redteam_runs (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             report          TEXT NOT NULL,
             detection_rate  REAL,
             started_at      TEXT,
@@ -140,7 +177,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS oauth_app_snapshots (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             app_id          TEXT NOT NULL,
             scopes          TEXT NOT NULL,
             user_count      INTEGER,
@@ -156,7 +193,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS rotation_tickets (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             incident_id     INTEGER,
             var_name        TEXT,
             service         TEXT,
@@ -167,7 +204,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS users (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             email           TEXT UNIQUE NOT NULL,
             password_hash   TEXT NOT NULL,
             name            TEXT NOT NULL,
@@ -177,8 +214,9 @@ def init_db():
 
     # Seed with a known supply-chain breach IOC
     cursor.execute("""
-        INSERT OR IGNORE INTO ioc_list (app_client_id, source, severity, description, date_added)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO ioc_list (app_client_id, source, severity, description, date_added)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (app_client_id) DO NOTHING
     """, (
         "110671459871-30f1spbu0hptbs60cb4vsmv79i7bbvqj.apps.googleusercontent.com",
         "Published security bulletin — AI supply-chain attack",
@@ -188,15 +226,20 @@ def init_db():
     ))
 
     _migrate_oauth_columns(cursor)
+    _migrate_env_alerts_columns(cursor)
     conn.commit()
-    conn.close()
+    release_connection(conn)
     print("[DATABASE] Initialized — all tables ready.")
 
 
 def _migrate_oauth_columns(cursor):
     """Add M2 columns to existing databases."""
-    cursor.execute("PRAGMA table_info(oauth_apps)")
-    cols = {row[1] for row in cursor.fetchall()}
+    cursor.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'oauth_apps'
+    """)
+    cols = {row['column_name'] for row in cursor.fetchall()}
     if "contributing_factors" not in cols:
         cursor.execute("ALTER TABLE oauth_apps ADD COLUMN contributing_factors TEXT")
     if "threat_intel" not in cols:
@@ -209,6 +252,18 @@ def _migrate_oauth_columns(cursor):
         cursor.execute("ALTER TABLE oauth_apps ADD COLUMN whitelisted INTEGER DEFAULT 0")
 
 
+def _migrate_env_alerts_columns(cursor):
+    """Add missing columns to env_alerts table in existing databases."""
+    cursor.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'env_alerts'
+    """)
+    cols = {row['column_name'] for row in cursor.fetchall()}
+    if "created_at" not in cols:
+        cursor.execute("ALTER TABLE env_alerts ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
+
+
 # ═══════════════════════════════════════════
 # OAUTH APPS
 # ═══════════════════════════════════════════
@@ -217,7 +272,7 @@ def _migrate_oauth_columns(cursor):
 def save_app(app: dict):
     """Insert or update an OAuth app record with risk score."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     scopes_str = json.dumps(app.get("scopes", [])) if isinstance(app.get("scopes"), list) else app.get("scopes", "")
 
@@ -227,7 +282,7 @@ def save_app(app: dict):
 
     cursor.execute("""
         INSERT INTO oauth_apps (app_id, name, publisher, scopes, user_count, risk_score, risk_category, explanation, is_ioc, last_scanned, contributing_factors, threat_intel, last_active, scope_drift, whitelisted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT(app_id) DO UPDATE SET
             name = excluded.name,
             publisher = excluded.publisher,
@@ -262,23 +317,23 @@ def save_app(app: dict):
     ))
 
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def clear_oauth_apps():
     """Clear all stored OAuth apps (used when connecting a new workspace)."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("DELETE FROM oauth_apps")
     cursor.execute("DELETE FROM risk_score_history")
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def clear_all_workspace_data():
     """Wipe all sensitive data when the workspace is disconnected."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     tables_to_clear = [
         "oauth_apps",
@@ -297,17 +352,17 @@ def clear_all_workspace_data():
         cursor.execute(f"DELETE FROM {table}")
         
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 
 def get_apps() -> list:
     """Return all scanned OAuth apps with current risk scores."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT * FROM oauth_apps ORDER BY risk_score DESC")
     rows = cursor.fetchall()
-    conn.close()
+    release_connection(conn)
 
     apps = []
     for row in rows:
@@ -356,11 +411,11 @@ def save_risk_score_history(
     trigger_reason: str,
 ):
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
         INSERT INTO risk_score_history (app_id, risk_score, risk_category, contributing_factors, trigger_reason, recorded_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (
             app_id,
@@ -372,23 +427,23 @@ def save_risk_score_history(
         ),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def get_risk_score_history(app_id: str, days: int = 90) -> list:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     cursor.execute(
         """
         SELECT * FROM risk_score_history
-        WHERE app_id = ? AND recorded_at >= ?
+        WHERE app_id = %s AND recorded_at >= %s
         ORDER BY recorded_at ASC
         """,
         (app_id, cutoff),
     )
     rows = [dict(r) for r in cursor.fetchall()]
-    conn.close()
+    release_connection(conn)
     for row in rows:
         if row.get("contributing_factors"):
             try:
@@ -443,13 +498,14 @@ def recalculate_all_app_scores(score_fn, trigger_reason: str = "ioc_update") -> 
 def save_event(event: dict):
     """Insert a DPI event from Lobster Trap webhook into the database."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     metadata_str = json.dumps(event.get("metadata", {})) if isinstance(event.get("metadata"), dict) else event.get("metadata", "{}")
 
     cursor.execute("""
         INSERT INTO dpi_events (timestamp, policy_triggered, action_taken, prompt_hash, intent_category, severity, alert_message, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
     """, (
         event.get("timestamp", datetime.now(timezone.utc).isoformat()),
         event.get("policy_triggered", "unknown"),
@@ -461,9 +517,9 @@ def save_event(event: dict):
         metadata_str
     ))
 
-    event_id = cursor.lastrowid
+    event_id = cursor.fetchone()['id']
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
     return event_id
 
@@ -471,18 +527,18 @@ def save_event(event: dict):
 def get_events(hours: int = 24) -> list:
     """Fetch DPI events from the last N hours."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
     cursor.execute("""
         SELECT * FROM dpi_events
-        WHERE timestamp >= ?
+        WHERE timestamp >= %s
         ORDER BY timestamp DESC
     """, (cutoff,))
 
     rows = cursor.fetchall()
-    conn.close()
+    release_connection(conn)
 
     events = []
     for row in rows:
@@ -501,19 +557,19 @@ def get_events(hours: int = 24) -> list:
 def get_event_count_by_severity() -> dict:
     """Get count of events grouped by severity for the last 24 hours."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
 
     cursor.execute("""
         SELECT severity, COUNT(*) as count
         FROM dpi_events
-        WHERE timestamp >= ?
+        WHERE timestamp >= %s
         GROUP BY severity
     """, (cutoff,))
 
     rows = cursor.fetchall()
-    conn.close()
+    release_connection(conn)
 
     return {row["severity"]: row["count"] for row in rows}
 
@@ -526,11 +582,12 @@ def get_event_count_by_severity() -> dict:
 def save_ioc(ioc: dict):
     """Add a new IOC entry to the local list."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor.execute("""
-        INSERT OR IGNORE INTO ioc_list (app_client_id, source, severity, description, date_added)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO ioc_list (app_client_id, source, severity, description, date_added)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (app_client_id) DO NOTHING
     """, (
         ioc["app_client_id"],
         ioc.get("source", "Manual Entry"),
@@ -540,26 +597,26 @@ def save_ioc(ioc: dict):
     ))
 
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def get_iocs() -> list:
     """Return all IOC entries."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT * FROM ioc_list ORDER BY date_added DESC")
     rows = cursor.fetchall()
-    conn.close()
+    release_connection(conn)
     return [dict(row) for row in rows]
 
 
 def check_ioc(app_client_id: str) -> bool:
     """Check if an OAuth app ID is in the IOC list."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) as cnt FROM ioc_list WHERE app_client_id = ?", (app_client_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT COUNT(*) as cnt FROM ioc_list WHERE app_client_id = %s", (app_client_id,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     return row["cnt"] > 0
 
 
@@ -571,11 +628,11 @@ def check_ioc(app_client_id: str) -> bool:
 def save_audit_log(actor: str, action: str, resource: str = "", outcome: str = ""):
     """Append an entry to the immutable audit log."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor.execute("""
         INSERT INTO audit_log (timestamp, actor, action, resource, outcome)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
     """, (
         datetime.now(timezone.utc).isoformat(),
         actor,
@@ -585,16 +642,16 @@ def save_audit_log(actor: str, action: str, resource: str = "", outcome: str = "
     ))
 
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def get_audit_log(limit: int = 100) -> list:
     """Return the most recent audit log entries."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?", (limit,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT %s", (limit,))
     rows = cursor.fetchall()
-    conn.close()
+    release_connection(conn)
     return [dict(row) for row in rows]
 
 
@@ -605,44 +662,48 @@ def get_audit_log(limit: int = 100) -> list:
 
 def add_whitelist(app_client_id: str, reason: str = "", added_by: str = "admin"):
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
-        INSERT OR REPLACE INTO oauth_whitelist (app_client_id, reason, added_by, added_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO oauth_whitelist (app_client_id, reason, added_by, added_at)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (app_client_id) DO UPDATE SET
+            reason = excluded.reason,
+            added_by = excluded.added_by,
+            added_at = excluded.added_at
         """,
         (app_client_id, reason, added_by, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def remove_whitelist(app_client_id: str):
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM oauth_whitelist WHERE app_client_id = ?", (app_client_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("DELETE FROM oauth_whitelist WHERE app_client_id = %s", (app_client_id,))
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def is_whitelisted(app_client_id: str) -> bool:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
-        "SELECT COUNT(*) as cnt FROM oauth_whitelist WHERE app_client_id = ?",
+        "SELECT COUNT(*) as cnt FROM oauth_whitelist WHERE app_client_id = %s",
         (app_client_id,),
     )
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     return row["cnt"] > 0
 
 
 def get_whitelist() -> list:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT * FROM oauth_whitelist ORDER BY added_at DESC")
     rows = [dict(r) for r in cursor.fetchall()]
-    conn.close()
+    release_connection(conn)
     return rows
 
 
@@ -653,12 +714,12 @@ def get_whitelist() -> list:
 
 def save_env_variable(record: dict):
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     agents = record.get("accessing_agents", [])
     cursor.execute(
         """
         INSERT INTO env_variables (var_name, classification, value_hash, last_rotated, last_accessed, accessing_agents, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT(var_name) DO UPDATE SET
             classification = excluded.classification,
             value_hash = excluded.value_hash,
@@ -677,12 +738,12 @@ def save_env_variable(record: dict):
         ),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 def get_env_variables() -> list:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT * FROM env_variables ORDER BY var_name")
     rows = []
     for row in cursor.fetchall():
@@ -693,17 +754,18 @@ def get_env_variables() -> list:
             except (json.JSONDecodeError, TypeError):
                 pass
         rows.append(r)
-    conn.close()
+    release_connection(conn)
     return rows
 
 
 def save_env_alert(alert: dict) -> int:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
         INSERT INTO env_alerts (var_name, severity, message, agent_id, event_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
         """,
         (
             alert["var_name"],
@@ -714,42 +776,42 @@ def save_env_alert(alert: dict) -> int:
             datetime.now(timezone.utc).isoformat(),
         ),
     )
-    alert_id = cursor.lastrowid
+    alert_id = cursor.fetchone()["id"]
     conn.commit()
-    conn.close()
+    release_connection(conn)
     return alert_id
 
 
 def get_env_alerts(hours: int = 24, unacknowledged_only: bool = False) -> list:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-    sql = "SELECT * FROM env_alerts WHERE created_at >= ?"
+    sql = "SELECT * FROM env_alerts WHERE created_at >= %s"
     params: list = [cutoff]
     if unacknowledged_only:
         sql += " AND acknowledged = 0"
     sql += " ORDER BY created_at DESC"
     cursor.execute(sql, params)
     rows = [dict(r) for r in cursor.fetchall()]
-    conn.close()
+    release_connection(conn)
     return rows
 
 
 def mark_env_rotated(var_name: str):
     """FR-3.6: Record credential rotation timestamp."""
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     now = datetime.now(timezone.utc).isoformat()
     cursor.execute(
         """
         INSERT INTO env_variables (var_name, classification, last_rotated, updated_at)
-        VALUES (?, 'SENSITIVE', ?, ?)
+        VALUES (%s, 'SENSITIVE', %s, %s)
         ON CONFLICT(var_name) DO UPDATE SET last_rotated = excluded.last_rotated, updated_at = excluded.updated_at
         """,
         (var_name, now, now),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 # ═══════════════════════════════════════════
@@ -759,10 +821,10 @@ def mark_env_rotated(var_name: str):
 
 def get_event(event_id: int) -> dict | None:
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM dpi_events WHERE id = ?", (event_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM dpi_events WHERE id = %s", (event_id,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         return None
     event = dict(row)
@@ -776,12 +838,13 @@ def get_event(event_id: int) -> dict | None:
 
 def save_incident(incident: dict) -> int:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     now = datetime.now(timezone.utc).isoformat()
     cursor.execute(
         """
         INSERT INTO incidents (event_id, workflow_key, title, severity, status, current_step, steps, remediation, event_summary, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
         """,
         (
             incident.get("event_id"),
@@ -797,18 +860,18 @@ def save_incident(incident: dict) -> int:
             now,
         ),
     )
-    iid = cursor.lastrowid
+    iid = cursor.fetchone()["id"]
     conn.commit()
-    conn.close()
+    release_connection(conn)
     return iid
 
 
 def get_incident(incident_id: int) -> dict | None:
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM incidents WHERE id = %s", (incident_id,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         return None
     inc = dict(row)
@@ -823,9 +886,9 @@ def get_incident(incident_id: int) -> dict | None:
 
 def get_incidents(status: str | None = None) -> list:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     if status:
-        cursor.execute("SELECT * FROM incidents WHERE status = ? ORDER BY created_at DESC", (status,))
+        cursor.execute("SELECT * FROM incidents WHERE status = %s ORDER BY created_at DESC", (status,))
     else:
         cursor.execute("SELECT * FROM incidents ORDER BY created_at DESC")
     rows = []
@@ -838,18 +901,18 @@ def get_incidents(status: str | None = None) -> list:
                 except (json.JSONDecodeError, TypeError):
                     pass
         rows.append(inc)
-    conn.close()
+    release_connection(conn)
     return rows
 
 
 def update_incident(incident_id: int, updates: dict):
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     steps = json.dumps(updates.get("steps", []))
     cursor.execute(
         """
-        UPDATE incidents SET status = ?, current_step = ?, steps = ?, updated_at = ?
-        WHERE id = ?
+        UPDATE incidents SET status = %s, current_step = %s, steps = %s, updated_at = %s
+        WHERE id = %s
         """,
         (
             updates.get("status"),
@@ -860,7 +923,7 @@ def update_incident(incident_id: int, updates: dict):
         ),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 # ═══════════════════════════════════════════
@@ -870,11 +933,12 @@ def update_incident(incident_id: int, updates: dict):
 
 def save_redteam_run(report: dict) -> int:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
         INSERT INTO redteam_runs (report, detection_rate, started_at, completed_at)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id
         """,
         (
             json.dumps(report),
@@ -883,16 +947,16 @@ def save_redteam_run(report: dict) -> int:
             report.get("completed_at"),
         ),
     )
-    rid = cursor.lastrowid
+    rid = cursor.fetchone()["id"]
     conn.commit()
-    conn.close()
+    release_connection(conn)
     return rid
 
 
 def get_redteam_runs(limit: int = 20) -> list:
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM redteam_runs ORDER BY id DESC LIMIT ?", (limit,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM redteam_runs ORDER BY id DESC LIMIT %s", (limit,))
     rows = []
     for row in cursor.fetchall():
         r = dict(row)
@@ -901,7 +965,7 @@ def get_redteam_runs(limit: int = 20) -> list:
         except (json.JSONDecodeError, TypeError):
             pass
         rows.append(r)
-    conn.close()
+    release_connection(conn)
     return rows
 
 
@@ -912,16 +976,16 @@ def get_redteam_runs(limit: int = 20) -> list:
 
 def get_latest_app_snapshot(app_id: str) -> dict | None:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
-        SELECT * FROM oauth_app_snapshots WHERE app_id = ?
+        SELECT * FROM oauth_app_snapshots WHERE app_id = %s
         ORDER BY recorded_at DESC LIMIT 1
         """,
         (app_id,),
     )
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         return None
     snap = dict(row)
@@ -942,16 +1006,16 @@ def save_app_snapshot(app_id: str, scopes: list, user_count: int) -> bool:
         changed = scopes_sorted != prev_scopes
 
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
         INSERT INTO oauth_app_snapshots (app_id, scopes, user_count, recorded_at)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
         """,
         (app_id, json.dumps(scopes), user_count, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
     return changed
 
 
@@ -962,10 +1026,10 @@ def save_app_snapshot(app_id: str, scopes: list, user_count: int) -> bool:
 
 def get_agent_baseline(agent_id: str) -> dict | None:
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM agent_baselines WHERE agent_id = ?", (agent_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM agent_baselines WHERE agent_id = %s", (agent_id,))
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         return None
     b = dict(row)
@@ -980,11 +1044,11 @@ def get_agent_baseline(agent_id: str) -> dict | None:
 
 def save_agent_baseline(baseline: dict):
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
         INSERT INTO agent_baselines (agent_id, intent_counts, severity_counts, total_events, last_seen)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT(agent_id) DO UPDATE SET
             intent_counts = excluded.intent_counts,
             severity_counts = excluded.severity_counts,
@@ -1000,7 +1064,7 @@ def save_agent_baseline(baseline: dict):
         ),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 # ═══════════════════════════════════════════
@@ -1010,11 +1074,12 @@ def save_agent_baseline(baseline: dict):
 
 def save_rotation_ticket(incident_id: int, var_name: str, service: str, playbook: dict) -> int:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
         INSERT INTO rotation_tickets (incident_id, var_name, service, status, playbook, created_at)
-        VALUES (?, ?, ?, 'in_progress', ?, ?)
+        VALUES (%s, %s, %s, 'in_progress', %s, %s)
+        RETURNING id
         """,
         (
             incident_id,
@@ -1024,24 +1089,24 @@ def save_rotation_ticket(incident_id: int, var_name: str, service: str, playbook
             datetime.now(timezone.utc).isoformat(),
         ),
     )
-    tid = cursor.lastrowid
+    tid = cursor.fetchone()["id"]
     conn.commit()
-    conn.close()
+    release_connection(conn)
     return tid
 
 
 def complete_rotation_ticket(ticket_id: int):
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
         """
-        UPDATE rotation_tickets SET status = 'completed', completed_at = ?
-        WHERE id = ?
+        UPDATE rotation_tickets SET status = 'completed', completed_at = %s
+        WHERE id = %s
         """,
         (datetime.now(timezone.utc).isoformat(), ticket_id),
     )
     conn.commit()
-    conn.close()
+    release_connection(conn)
 
 
 # ═══════════════════════════════════════════
@@ -1051,34 +1116,35 @@ def complete_rotation_ticket(ticket_id: int):
 
 def create_user(email: str, password_hash: str, name: str) -> dict:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     now = datetime.now(timezone.utc).isoformat()
     try:
         cursor.execute(
             """
             INSERT INTO users (email, password_hash, name, created_at)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
             """,
             (email, password_hash, name.strip(), now),
         )
-        user_id = cursor.lastrowid
+        user_id = cursor.fetchone()["id"]
         conn.commit()
-    except sqlite3.IntegrityError:
-        conn.close()
+    except psycopg2.IntegrityError:
+        release_connection(conn)
         raise ValueError("email_taken")
-    conn.close()
+    release_connection(conn)
     return {"id": user_id, "email": email, "name": name.strip(), "created_at": now}
 
 
 def get_user_by_email(email: str) -> Optional[dict]:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
-        "SELECT id, email, password_hash, name, created_at FROM users WHERE email = ?",
+        "SELECT id, email, password_hash, name, created_at FROM users WHERE email = %s",
         (email,),
     )
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         return None
     return dict(row)
@@ -1086,13 +1152,13 @@ def get_user_by_email(email: str) -> Optional[dict]:
 
 def get_user_by_id(user_id: int) -> Optional[dict]:
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
-        "SELECT id, email, name, created_at FROM users WHERE id = ?",
+        "SELECT id, email, name, created_at FROM users WHERE id = %s",
         (user_id,),
     )
     row = cursor.fetchone()
-    conn.close()
+    release_connection(conn)
     if not row:
         return None
     return dict(row)

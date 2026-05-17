@@ -31,22 +31,18 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
-load_dotenv()
+# Search for unified root .env first, then local .env
+_env_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+if os.path.exists(_env_file):
+    load_dotenv(_env_file)
+else:
+    load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), ".env")))
 
-from auth import (
-    hash_password,
-    verify_password,
-    validate_email,
-    validate_password,
-    create_access_token,
-    decode_access_token,
-)
+from auth import decode_access_token
 from database import (
     init_db,
-    create_user,
-    get_user_by_email,
-    get_user_by_id,
     get_apps,
     get_app_by_id,
     save_event,
@@ -134,6 +130,7 @@ PUBLIC_API_ROUTES = {
     ("POST", "/api/auth/register"),
     ("POST", "/api/auth/login"),
     ("POST", "/api/webhook/lobster"),
+    ("GET", "/api/status"),
 }
 
 
@@ -175,82 +172,19 @@ async def dashboard_auth_middleware(request: Request, call_next):
     if not claims:
         return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
 
-    db_user = get_user_by_id(claims["id"])
-    if not db_user:
-        return JSONResponse(status_code=401, content={"detail": "User not found"})
-
-    request.state.user = db_user
+    # Map Supabase JWT claims directly to the application state
+    request.state.user = {
+        "id": claims["id"],
+        "email": claims["email"],
+        "name": claims.get("name", "User")
+    }
     return await call_next(request)
-
-
-class RegisterRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=120)
-    email: str = Field(..., min_length=3, max_length=254)
-    password: str = Field(..., min_length=8, max_length=128)
-
-
-class LoginRequest(BaseModel):
-    email: str = Field(..., min_length=3, max_length=254)
-    password: str = Field(..., min_length=1, max_length=128)
 
 
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: dict
-
-
-@app.post("/api/auth/register", response_model=AuthResponse)
-def register_user(body: RegisterRequest):
-    email = validate_email(body.email)
-    password = validate_password(body.password)
-    name = body.name.strip()
-    if not email:
-        raise HTTPException(status_code=400, detail="Invalid email address")
-    if not password:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
-
-    try:
-        password_hash = hash_password(password)
-    except Exception as e:
-        logger.error("Password hashing failed: %s", e)
-        raise HTTPException(status_code=500, detail="Could not secure password. Please try again.")
-
-    try:
-        user = create_user(email, password_hash, name)
-    except ValueError as e:
-        if str(e) == "email_taken":
-            raise HTTPException(status_code=409, detail="An account with this email already exists")
-        raise HTTPException(status_code=400, detail="Could not create account")
-
-    token = create_access_token(user["id"], user["email"])
-    save_audit_log(user["email"], "user_registered", "auth", "New dashboard account")
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {"id": user["id"], "email": user["email"], "name": user["name"]},
-    }
-
-
-@app.post("/api/auth/login", response_model=AuthResponse)
-def login_user(body: LoginRequest):
-    email = validate_email(body.email)
-    if not email:
-        raise HTTPException(status_code=400, detail="Invalid email address")
-
-    user = get_user_by_email(email)
-    if not user or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    token = create_access_token(user["id"], user["email"])
-    save_audit_log(user["email"], "user_login", "auth", "Dashboard login")
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {"id": user["id"], "email": user["email"], "name": user["name"]},
-    }
 
 
 @app.get("/api/auth/me")
@@ -367,18 +301,10 @@ def _launch_lobster_trap():
         logger.error("Failed to start webhook_bridge.py: %s", e)
 
 
-@app.on_event("shutdown")
-def shutdown_event():
-    """Gracefully terminate Lobster Trap sub-processes on server shutdown."""
-    for proc, name in ((_lobster_proc, "lobstertrap"), (_bridge_proc, "webhook_bridge")):
-        if proc and proc.poll() is None:
-            proc.terminate()
-            logger.info("%s terminated (PID %d)", name, proc.pid)
-
-
-@app.on_event("startup")
-def startup_event():
-    """Initialize database on server startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database and services on startup, and clean up on shutdown."""
+    # Initialize database on server startup
     init_db()
 
     # FR-4.1: Auto-launch Lobster Trap proxy + webhook bridge
@@ -390,6 +316,16 @@ def startup_event():
     _start_scan_scheduler()
     logger.info("ContextGuard API started on :3000")
     save_audit_log("system", "startup", "api", "ContextGuard API initialized")
+
+    yield
+
+    # Gracefully terminate Lobster Trap sub-processes on server shutdown
+    for proc, name in ((_lobster_proc, "lobstertrap"), (_bridge_proc, "webhook_bridge")):
+        if proc and proc.poll() is None:
+            proc.terminate()
+            logger.info("%s terminated (PID %d)", name, proc.pid)
+
+app.router.lifespan_context = lifespan
 
 
 # ═══════════════════════════════════════════
@@ -533,9 +469,12 @@ def connect_workspace(payload: WorkspaceConnectRequest):
     
     import dotenv
     env_file = os.path.join(os.path.dirname(__file__), ".env")
-    dotenv.set_key(env_file, "GOOGLE_WORKSPACE_CREDS", creds_path)
-    dotenv.set_key(env_file, "GOOGLE_ADMIN_EMAIL", payload.admin_email)
-    dotenv.set_key(env_file, "OAUTH_USE_SYNTHETIC", "false")
+    try:
+        dotenv.set_key(env_file, "GOOGLE_WORKSPACE_CREDS", creds_path)
+        dotenv.set_key(env_file, "GOOGLE_ADMIN_EMAIL", payload.admin_email)
+        dotenv.set_key(env_file, "OAUTH_USE_SYNTHETIC", "false")
+    except Exception as e:
+        print("⚠️ [SYSTEM] Warning: Unable to write to .env file:", e)
     
     # Clear out dummy/synthetic data so the new workspace shows actual state
     clear_oauth_apps()
@@ -1188,9 +1127,21 @@ def system_status():
     creds_path = os.getenv("GOOGLE_WORKSPACE_CREDS", "")
     admin_email = os.getenv("GOOGLE_ADMIN_EMAIL", "")
 
+    resolved_path = creds_path
+    if creds_path and not os.path.isabs(creds_path):
+        possible_paths = [
+            os.path.abspath(creds_path),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), creds_path)),
+            os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), creds_path))
+        ]
+        for p in possible_paths:
+            if os.path.exists(p):
+                resolved_path = p
+                break
+
     workspace_connected = (
         bool(creds_path)
-        and os.path.exists(creds_path)
+        and os.path.exists(resolved_path)
         and bool(admin_email)
     )
 
@@ -1224,8 +1175,11 @@ def disconnect_workspace():
     """Clear real workspace data."""
     import dotenv
     env_file = os.path.join(os.path.dirname(__file__), ".env")
-    dotenv.set_key(env_file, "GOOGLE_WORKSPACE_CREDS", "")
-    dotenv.set_key(env_file, "GOOGLE_ADMIN_EMAIL", "")
+    try:
+        dotenv.set_key(env_file, "GOOGLE_WORKSPACE_CREDS", "")
+        dotenv.set_key(env_file, "GOOGLE_ADMIN_EMAIL", "")
+    except Exception as e:
+        print("⚠️ [SYSTEM] Warning: Unable to write to .env file:", e)
     os.environ.pop("GOOGLE_WORKSPACE_CREDS", None)
     from database import clear_all_workspace_data, save_audit_log
     clear_all_workspace_data()

@@ -1,105 +1,70 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
+import axios from 'axios';
 
-export const API = import.meta.env.DEV ? 'http://localhost:3000' : ''
-const TOKEN_KEY = 'contextguard_token'
+export const API = import.meta.env.DEV ? 'http://localhost:3000' : '';
 
-const AuthContext = createContext(null)
+const AuthContext = createContext();
 
-let interceptorReady = false
+export const useAuth = () => useContext(AuthContext);
 
-function setupAxiosAuth() {
-  if (interceptorReady) return
-  interceptorReady = true
-
-  axios.interceptors.request.use((config) => {
-    const token = localStorage.getItem(TOKEN_KEY)
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  })
-
-  axios.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      const url = error.config?.url || ''
-      const isAuthRoute = url.includes('/api/auth/login') || url.includes('/api/auth/register')
-      if (error.response?.status === 401 && !isAuthRoute) {
-        localStorage.removeItem(TOKEN_KEY)
-        if (window.location.pathname.startsWith('/dashboard')) {
-          window.location.assign('/login')
-        }
-      }
-      return Promise.reject(error)
-    }
-  )
-}
-
-export function AuthProvider({ children }) {
-  setupAxiosAuth()
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  const refreshUser = useCallback(async () => {
-    const token = localStorage.getItem(TOKEN_KEY)
-    if (!token) {
-      setUser(null)
-      setLoading(false)
-      return null
-    }
-    try {
-      const res = await axios.get(`${API}/api/auth/me`)
-      setUser(res.data)
-      return res.data
-    } catch {
-      localStorage.removeItem(TOKEN_KEY)
-      setUser(null)
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    refreshUser()
-  }, [refreshUser])
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${session.access_token}`;
+      } else {
+        delete axios.defaults.headers.common['Authorization'];
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const login = async (email, password) => {
-    const res = await axios.post(`${API}/api/auth/login`, { email, password })
-    localStorage.setItem(TOKEN_KEY, res.data.access_token)
-    setUser(res.data.user)
-    return res.data.user
-  }
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (data.session?.access_token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${data.session.access_token}`;
+    }
+    return data;
+  };
 
   const register = async (name, email, password) => {
-    const res = await axios.post(`${API}/api/auth/register`, { name, email, password })
-    localStorage.setItem(TOKEN_KEY, res.data.access_token)
-    setUser(res.data.user)
-    return res.data.user
-  }
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name: name } }
+    });
+    if (error) throw error;
+    if (data.session?.access_token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${data.session.access_token}`;
+    }
+    return data;
+  };
 
   const logout = async () => {
     try {
-      await axios.post(`${API}/api/auth/logout`)
-    } catch {
-      /* token may already be invalid */
-    }
-    localStorage.removeItem(TOKEN_KEY)
-    setUser(null)
-  }
+      await axios.post('/api/auth/logout');
+    } catch(e) {}
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  };
 
-  return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
-      {children}
-    </AuthContext.Provider>
-  )
-}
+  const value = { user, loading, login, register, logout };
 
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
-  return ctx
-}
+  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+};

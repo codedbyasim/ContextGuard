@@ -16,7 +16,12 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+# Search for unified root .env first, then local .env
+_env_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+if os.path.exists(_env_file):
+    load_dotenv(_env_file)
+else:
+    load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), ".env")))
 
 logger = logging.getLogger("contextguard.gemini")
 
