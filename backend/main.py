@@ -1212,34 +1212,51 @@ if __name__ == "__main__":
     import uvicorn
     import subprocess
     import sys
+    import os
     
     frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
+    is_production = os.getenv("RENDER") == "true" or os.getenv("PORT") is not None
     
     print("==================================================")
     print("🚀 ContextGuard Starting...")
     print("==================================================")
     
-    # Check if frontend dependencies are installed
-    if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
-        print("📦 Installing frontend dependencies...")
-        subprocess.run("npm install", cwd=frontend_dir, shell=True)
-    
-    # Start the frontend dev server in the background
-    print("✨ Starting React Frontend (Vite) in background...")
-    frontend_process = subprocess.Popen("npm run dev", cwd=frontend_dir, shell=True)
-    
-    print("🛡️ Starting FastAPI Backend...")
-    print("👉 Dashboard will be available at: http://localhost:5173")
-    print("👉 API Backend running at: http://localhost:3000")
-    print("👉 Proxy running at: http://localhost:8080")
-    print("==================================================")
-    
-    try:
-        uvicorn.run("main:app", host="0.0.0.0", port=3000)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        print("\n🛑 Shutting down ContextGuard...")
-        frontend_process.terminate()
+    if is_production:
+        print("🛡️ Running in PRODUCTION Mode...")
+        port = int(os.getenv("PORT", 8000))
+        print(f"👉 FastAPI & React Static serving on port: {port}")
+        print("==================================================")
+        try:
+            uvicorn.run("main:app", host="0.0.0.0", port=port)
+        except KeyboardInterrupt:
+            pass
         sys.exit(0)
+    else:
+        print("🛡️ Running in DEVELOPMENT Mode...")
+        # Check if frontend dependencies are installed
+        if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
+            print("📦 Installing frontend dependencies...")
+            subprocess.run("npm install", cwd=frontend_dir, shell=True)
+        
+        # Start the frontend dev server in the background
+        print("✨ Starting React Frontend (Vite) in background...")
+        frontend_process = subprocess.Popen("npm run dev", cwd=frontend_dir, shell=True)
+        
+        print("🛡️ Starting FastAPI Backend...")
+        print("👉 Dashboard will be available at: http://localhost:5173")
+        print("👉 API Backend running at: http://localhost:3000")
+        print("👉 Proxy running at: http://localhost:8080")
+        print("==================================================")
+        
+        try:
+            uvicorn.run("main:app", host="0.0.0.0", port=3000)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            print("\n🛑 Shutting down ContextGuard...")
+            try:
+                frontend_process.terminate()
+            except Exception:
+                pass
+            sys.exit(0)
 
