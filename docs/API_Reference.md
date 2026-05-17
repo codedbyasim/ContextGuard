@@ -4,7 +4,31 @@
 ---
 
 ## Authentication
-Currently open (no auth). Production deployment requires Bearer token per SRS §9.1.
+
+Dashboard API routes require a JWT bearer token:
+
+```
+Authorization: Bearer <access_token>
+```
+
+**Public routes (no token):**
+
+| Method | Endpoint |
+|--------|----------|
+| `POST` | `/api/auth/register` |
+| `POST` | `/api/auth/login` |
+| `POST` | `/api/webhook/lobster` |
+
+**Auth routes:**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/register` | Body: `{ "name", "email", "password" }` (password ≥ 8 chars) |
+| `POST` | `/api/auth/login` | Body: `{ "email", "password" }` → `{ access_token, user }` |
+| `GET` | `/api/auth/me` | Current user (requires Bearer token) |
+| `POST` | `/api/auth/logout` | Audit log entry (requires Bearer token) |
+
+Set `JWT_SECRET_KEY` and `JWT_EXPIRE_HOURS` in `backend/.env`. For pytest only: `AUTH_DISABLED=true`.
 
 All responses are `application/json`. All timestamps are ISO 8601 UTC.
 

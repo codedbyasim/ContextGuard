@@ -34,8 +34,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from auth import (
+    hash_password,
+    verify_password,
+    validate_email,
+    validate_password,
+    create_access_token,
+    decode_access_token,
+)
 from database import (
     init_db,
+    create_user,
+    get_user_by_email,
+    get_user_by_id,
     get_apps,
     get_app_by_id,
     save_event,
@@ -112,6 +123,150 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ═══════════════════════════════════════════
+# AUTH
+# ═══════════════════════════════════════════
+
+AUTH_DISABLED = os.getenv("AUTH_DISABLED", "").lower() in ("1", "true", "yes")
+
+PUBLIC_API_ROUTES = {
+    ("POST", "/api/auth/register"),
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/webhook/lobster"),
+}
+
+
+def _auth_is_public(method: str, path: str) -> bool:
+    return (method.upper(), path) in PUBLIC_API_ROUTES
+
+
+def _extract_bearer_token(request: Request) -> Optional[str]:
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:].strip()
+    return None
+
+
+def get_current_user(request: Request) -> dict:
+    if AUTH_DISABLED:
+        return {"id": 0, "email": "dev@local", "name": "Dev"}
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+@app.middleware("http")
+async def dashboard_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    method = request.method.upper()
+
+    if AUTH_DISABLED or not path.startswith("/api/"):
+        return await call_next(request)
+    if method == "OPTIONS" or _auth_is_public(method, path):
+        return await call_next(request)
+
+    token = _extract_bearer_token(request)
+    if not token:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+
+    claims = decode_access_token(token)
+    if not claims:
+        return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
+
+    db_user = get_user_by_id(claims["id"])
+    if not db_user:
+        return JSONResponse(status_code=401, content={"detail": "User not found"})
+
+    request.state.user = db_user
+    return await call_next(request)
+
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: dict
+
+
+@app.post("/api/auth/register", response_model=AuthResponse)
+def register_user(body: RegisterRequest):
+    email = validate_email(body.email)
+    password = validate_password(body.password)
+    name = body.name.strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    if not password:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    try:
+        password_hash = hash_password(password)
+    except Exception as e:
+        logger.error("Password hashing failed: %s", e)
+        raise HTTPException(status_code=500, detail="Could not secure password. Please try again.")
+
+    try:
+        user = create_user(email, password_hash, name)
+    except ValueError as e:
+        if str(e) == "email_taken":
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        raise HTTPException(status_code=400, detail="Could not create account")
+
+    token = create_access_token(user["id"], user["email"])
+    save_audit_log(user["email"], "user_registered", "auth", "New dashboard account")
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"id": user["id"], "email": user["email"], "name": user["name"]},
+    }
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+def login_user(body: LoginRequest):
+    email = validate_email(body.email)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+
+    user = get_user_by_email(email)
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_access_token(user["id"], user["email"])
+    save_audit_log(user["email"], "user_login", "auth", "Dashboard login")
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"id": user["id"], "email": user["email"], "name": user["name"]},
+    }
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    user = get_current_user(request)
+    if AUTH_DISABLED:
+        return {"id": 0, "email": "dev@local", "name": "Dev", "auth_disabled": True}
+    return {"id": user["id"], "email": user["email"], "name": user["name"]}
+
+
+@app.post("/api/auth/logout")
+def logout_user(request: Request):
+    user = get_current_user(request)
+    save_audit_log(user.get("email", "unknown"), "user_logout", "auth", "Dashboard logout")
+    return {"status": "ok"}
+
 
 # ═══════════════════════════════════════════
 # STARTUP

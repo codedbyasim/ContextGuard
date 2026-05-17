@@ -7,3 +7,5 @@ aiohttp
 requests
 google-api-python-client
 google-auth
+PyJWT
+bcrypt>=4.0.0,<5

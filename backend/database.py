@@ -12,6 +12,7 @@ import sqlite3
 import os
 import json
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "contextguard.db")
 
@@ -163,6 +164,14 @@ def init_db():
             playbook        TEXT,
             created_at      TEXT NOT NULL,
             completed_at    TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email           TEXT UNIQUE NOT NULL,
+            password_hash   TEXT NOT NULL,
+            name            TEXT NOT NULL,
+            created_at      TEXT NOT NULL
         );
     """)
 
@@ -1033,3 +1042,57 @@ def complete_rotation_ticket(ticket_id: int):
     )
     conn.commit()
     conn.close()
+
+
+# ═══════════════════════════════════════════
+# USERS (dashboard auth)
+# ═══════════════════════════════════════════
+
+
+def create_user(email: str, password_hash: str, name: str) -> dict:
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO users (email, password_hash, name, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (email, password_hash, name.strip(), now),
+        )
+        user_id = cursor.lastrowid
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise ValueError("email_taken")
+    conn.close()
+    return {"id": user_id, "email": email, "name": name.strip(), "created_at": now}
+
+
+def get_user_by_email(email: str) -> Optional[dict]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, email, password_hash, name, created_at FROM users WHERE email = ?",
+        (email,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, email, name, created_at FROM users WHERE id = ?",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)

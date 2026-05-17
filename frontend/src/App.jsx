@@ -6,6 +6,8 @@ import RedTeamSimulator from './RedTeamSimulator'
 import IncidentResponse from './IncidentResponse'
 import { Routes, Route, useNavigate, useLocation, Link, Navigate, useParams } from 'react-router-dom'
 import axios from 'axios'
+import { useAuth, API } from './auth'
+import { LoginPage, SignupPage } from './AuthPages'
 import {
   ShieldAlert, AppWindow, FileKey, Crosshair, Activity,
   LogOut, Menu, Bell, Shield, Wifi, WifiOff, Database,
@@ -14,7 +16,59 @@ import {
   AlertTriangle, BarChart3, Server
 } from 'lucide-react'
 
-const API = import.meta.env.DEV ? 'http://localhost:3000' : ''
+/* ─── AUTH ROUTES ─────────────────────────────────────────────── */
+function AuthLoadingScreen() {
+  return (
+    <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+    </div>
+  )
+}
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <AuthLoadingScreen />
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />
+  return children
+}
+
+function GuestRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <AuthLoadingScreen />
+  if (user) return <Navigate to="/dashboard/threats" replace />
+  return children
+}
+
+function useGoDashboard() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  return () => navigate(user ? '/dashboard/threats' : '/login')
+}
+
+function useGoSignup() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  return () => navigate(user ? '/dashboard/threats' : '/signup')
+}
+
+function MarketingHeaderActions() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  if (user) {
+    return (
+      <button onClick={() => navigate('/dashboard/threats')} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">
+        Open Dashboard
+      </button>
+    )
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={() => navigate('/login')} className="px-4 py-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors">Sign in</button>
+      <button onClick={() => navigate('/signup')} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Get started</button>
+    </div>
+  )
+}
 
 /* ─── FOOTER ──────────────────────────────────────────────────── */
 function Footer({ minimal }) {
@@ -69,6 +123,7 @@ function Footer({ minimal }) {
 /* ─── ABOUT PAGE ─────────────────────────────────────────────── */
 function AboutPage() {
   const navigate = useNavigate()
+  const goSignup = useGoSignup()
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans">
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-800/60 bg-[#09090b]/90 backdrop-blur-md">
@@ -77,7 +132,7 @@ function AboutPage() {
             <Shield className="w-6 h-6 text-blue-500" />
             <span className="font-semibold text-zinc-100 tracking-tight">ContextGuard</span>
           </button>
-          <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
+          <MarketingHeaderActions />
         </div>
       </header>
       <div className="pt-24 md:pt-28 pb-16 md:pb-20 px-4 sm:px-6">
@@ -126,7 +181,7 @@ function AboutPage() {
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-8 text-center">
             <h3 className="text-xl font-bold text-zinc-100 mb-3">Built for your team</h3>
             <p className="text-zinc-400 mb-6 text-sm">ContextGuard works with your current setup. No need to change anything.</p>
-            <button onClick={() => navigate('/dashboard')} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2">
+            <button onClick={goSignup} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2">
               See it in action <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -140,6 +195,7 @@ function AboutPage() {
 /* ─── PRICING PAGE ───────────────────────────────────────────── */
 function PricingPage() {
   const navigate = useNavigate()
+  const goSignup = useGoSignup()
   const [annual, setAnnual] = useState(true)
   const plans = [
     {
@@ -169,7 +225,7 @@ function PricingPage() {
             <Shield className="w-6 h-6 text-blue-500" />
             <span className="font-semibold text-zinc-100 tracking-tight">ContextGuard</span>
           </button>
-          <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-sm lg:text-base bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
+          <MarketingHeaderActions />
         </div>
       </header>
       <div className="pt-24 md:pt-28 pb-16 md:pb-20 px-4 sm:px-6">
@@ -210,7 +266,7 @@ function PricingPage() {
                     </li>
                   ))}
                 </ul>
-                <button onClick={() => navigate('/dashboard')} className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${plan.highlighted ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700'}`}>
+                <button onClick={goSignup} className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${plan.highlighted ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700'}`}>
                   {plan.cta}
                 </button>
               </div>
@@ -242,6 +298,8 @@ function PricingPage() {
 /* ─── LANDING PAGE ───────────────────────────────────────────── */
 function LandingPage() {
   const navigate = useNavigate()
+  const goSignup = useGoSignup()
+  const { user } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
@@ -259,7 +317,7 @@ function LandingPage() {
             <button onClick={() => navigate('/pricing')} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors rounded-md hover:bg-zinc-800/50">Pricing</button>
           </nav>
           <div className="hidden md:flex items-center gap-3">
-            <button onClick={() => navigate('/dashboard')} className="px-4 py-2 text-sm lg:text-base lg:px-6 lg:py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Open Dashboard</button>
+            <MarketingHeaderActions />
           </div>
           <button className="md:hidden p-2 text-zinc-400" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -270,7 +328,7 @@ function LandingPage() {
             <button onClick={() => navigate('/about')} className="block w-full text-left px-3 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 rounded-md">About</button>
             <button onClick={() => navigate('/pricing')} className="block w-full text-left px-3 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 rounded-md">Pricing</button>
             <div className="pt-3 flex flex-col gap-2">
-              <button onClick={() => navigate('/dashboard')} className="px-4 py-2.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium">Open Dashboard</button>
+              <MarketingHeaderActions />
             </div>
           </div>
         )}
@@ -293,9 +351,14 @@ function LandingPage() {
             ContextGuard checks your Google Workspace and protects your company from bad AI apps easily and safely.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-            <button onClick={() => navigate('/dashboard')} className="w-full sm:w-auto px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-base sm:text-lg transition-colors flex items-center justify-center gap-2">
-              <Lock className="w-5 h-5" /> Open Dashboard
+            <button onClick={goSignup} className="w-full sm:w-auto px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-base sm:text-lg transition-colors flex items-center justify-center gap-2">
+              <Lock className="w-5 h-5" /> {user ? 'Open Dashboard' : 'Get started free'}
             </button>
+            {!user && (
+              <button onClick={() => navigate('/login')} className="w-full sm:w-auto px-6 py-3 sm:px-8 sm:py-4 border border-zinc-700 hover:border-zinc-500 text-zinc-200 rounded-lg font-medium text-base sm:text-lg transition-colors">
+                Sign in
+              </button>
+            )}
           </div>
           <p className="mt-6 text-xs text-zinc-500">No credit card required · Safe & Secure · AI-Powered</p>
         </div>
@@ -375,8 +438,8 @@ function LandingPage() {
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-zinc-100 mb-4 md:mb-6">Ready to make your team safe?</h2>
           <p className="text-base md:text-lg text-zinc-400 mb-8 md:mb-10">Join other teams who trust ContextGuard to keep their tools safe.</p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-            <button onClick={() => navigate('/dashboard')} className="px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-base sm:text-lg transition-colors flex items-center justify-center gap-2">
-              Open Dashboard <ArrowRight className="w-5 h-5" />
+            <button onClick={goSignup} className="px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-base sm:text-lg transition-colors flex items-center justify-center gap-2">
+              {user ? 'Open Dashboard' : 'Get started'} <ArrowRight className="w-5 h-5" />
             </button>
             <button onClick={() => navigate('/pricing')} className="px-6 py-3 sm:px-8 sm:py-4 border border-zinc-700 hover:border-zinc-500 text-zinc-200 rounded-lg font-medium text-base sm:text-lg transition-colors">
               View Pricing
@@ -477,7 +540,7 @@ function NotificationsDropdown({ onClose }) {
 }
 
 /* ─── PROFILE DROPDOWN ───────────────────────────────────────── */
-function ProfileDropdown({ onDisconnect, onClose, wsConnected, systemStatus }) {
+function ProfileDropdown({ onDisconnect, onSignOut, onClose, wsConnected, systemStatus, user }) {
   const menuItems = [
     { label: 'Dashboard', icon: Shield, action: onClose },
     { label: 'Settings', icon: Lock, action: onClose },
@@ -493,10 +556,10 @@ function ProfileDropdown({ onDisconnect, onClose, wsConnected, systemStatus }) {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-zinc-100 truncate">
-              {wsConnected ? systemStatus?.workspace?.admin_email?.split('@')[0] : 'Demo User'}
+              {user?.name || (wsConnected ? systemStatus?.workspace?.admin_email?.split('@')[0] : 'User')}
             </p>
             <p className="text-xs text-zinc-500 truncate">
-              {wsConnected ? systemStatus?.workspace?.admin_email : 'Demo Mode'}
+              {user?.email || (wsConnected ? systemStatus?.workspace?.admin_email : 'Not signed in')}
             </p>
           </div>
         </div>
@@ -515,10 +578,15 @@ function ProfileDropdown({ onDisconnect, onClose, wsConnected, systemStatus }) {
         ))}
       </div>
       <div className="border-t border-zinc-800 py-1">
+        <button onClick={onSignOut}
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50 transition-colors">
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          Sign out
+        </button>
         <button onClick={onDisconnect}
           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors">
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          Disconnect
+          Disconnect workspace
         </button>
       </div>
     </div>
@@ -529,6 +597,7 @@ function ProfileDropdown({ onDisconnect, onClose, wsConnected, systemStatus }) {
 function Dashboard() {
   const { tab } = useParams()
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const activeTab = tab || 'threats'
   const setActiveTab = (newTab) => navigate(`/dashboard/${newTab}`)
   
@@ -562,6 +631,11 @@ function Dashboard() {
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
   }, [])
+
+  const handleSignOut = async () => {
+    await logout()
+    navigate('/login')
+  }
 
   const handleDisconnect = async () => {
     try {
@@ -705,9 +779,11 @@ function Dashboard() {
               {showProfile && (
                 <ProfileDropdown
                   onDisconnect={handleDisconnect}
+                  onSignOut={handleSignOut}
                   onClose={() => setShowProfile(false)}
                   wsConnected={wsConnected}
                   systemStatus={systemStatus}
+                  user={user}
                 />
               )}
             </div>
@@ -731,8 +807,10 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/about" element={<AboutPage />} />
       <Route path="/pricing" element={<PricingPage />} />
-      <Route path="/dashboard" element={<Navigate to="/dashboard/threats" replace />} />
-      <Route path="/dashboard/:tab" element={<Dashboard />} />
+      <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
+      <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/dashboard/threats" replace /></ProtectedRoute>} />
+      <Route path="/dashboard/:tab" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

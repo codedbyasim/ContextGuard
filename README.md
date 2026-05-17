@@ -90,7 +90,7 @@ flowchart TD
 | **M2 — AI Threat Scoring Engine** | ✅ Production | Gemini 2.5 Pro analyzes blast radius, vendor trust, behavioral deviation, scope drift |
 | **M3 — Environment Variable Guardian** | ✅ Production | Classifies system env vars, monitors AI agent access via Lobster Trap integration |
 | **M4 — Lobster Trap DPI Layer** | ✅ Production | Go-based transparent proxy intercepts all LLM API calls with YAML policy enforcement |
-| **M5 — Governance Dashboard** | ✅ Production | Real-time Threat Feed, OAuth audit, compliance report generation |
+| **M5 — Governance Dashboard** | ✅ Production | Real-time Threat Feed, OAuth audit, compliance report generation, JWT login/signup |
 | **M6 — Red-Team Simulator** | ✅ Production | Replays real-world AI supply-chain attack scenarios + live in-browser prompt injection tester |
 | **M7 — Incident Response** | ✅ Production | Guided remediation workflows, step tracking, 1-click credential rotation |
 
@@ -138,19 +138,30 @@ pip install -r requirements.txt
 
 ### 2 — Configure Environment
 
-Create `backend/.env`:
+Copy the template and edit `backend/.env`:
+
+```bash
+cp backend/.env.example backend/.env
+```
 
 ```env
 # Required
 GEMINI_API_KEY=your_gemini_api_key_here
 
+# Dashboard authentication (required for login/signup)
+JWT_SECRET_KEY=change-this-to-a-long-random-secret-in-production
+JWT_EXPIRE_HOURS=168
+AUTH_DISABLED=false
+
 # Google Workspace (for real OAuth scanning)
 GOOGLE_WORKSPACE_CREDS=path/to/service_account.json
 GOOGLE_ADMIN_EMAIL=admin@yourcompany.com
 
-# Set to 'true' for demo mode (74 synthetic apps), 'false' for real workspace
-OAUTH_USE_SYNTHETIC=false
+# Set to true for demo mode (synthetic apps), false for real workspace
+OAUTH_USE_SYNTHETIC=true
 ```
+
+> **Never commit `backend/.env`** — it contains secrets. Use `backend/.env.example` as the template only.
 
 ### 3 — Run ContextGuard
 
@@ -163,8 +174,58 @@ python main.py
 ```
 *This command will automatically install frontend packages, build the Vite React app, start the frontend dev server, run the FastAPI backend, AND spawn the Lobster Trap DPI Proxy with its webhook bridge — all in one terminal window.*
 
-Open **http://localhost:3000** in your browser to access the dashboard.
-Proxy will be available at **http://localhost:8080**.
+| Service | URL |
+|---------|-----|
+| **Dashboard (dev)** | http://localhost:5173 |
+| **Sign up** | http://localhost:5173/signup |
+| **Sign in** | http://localhost:5173/login |
+| **API backend** | http://localhost:3000 |
+| **DPI proxy** (optional) | http://localhost:8080 |
+
+### 4 — Create your account
+
+The dashboard is **restricted to registered users**:
+
+1. Open http://localhost:5173/signup and create an account (email + password, 8+ characters).
+2. Sign in at http://localhost:5173/login.
+3. Open the dashboard at http://localhost:5173/dashboard/threats.
+
+All API calls from the dashboard send `Authorization: Bearer <token>`. Unauthenticated requests to `/api/*` return **401**, except:
+
+- `POST /api/auth/register` and `POST /api/auth/login` (public)
+- `POST /api/webhook/lobster` (Lobster Trap webhook — no token)
+
+**Reset local users** (e.g. after testing):
+
+```bash
+cd backend
+python scripts/reset_users.py
+```
+
+**Alternative — two terminals (development):**
+
+```bash
+# Terminal 1 — API
+cd backend
+uvicorn main:app --host 0.0.0.0 --port 3000 --reload
+
+# Terminal 2 — Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## Lobster Trap (optional DPI proxy)
+
+Place the Windows binary here (not included in the repo — build from [veeainc/lobstertrap](https://github.com/veeainc/lobstertrap)):
+
+```
+lobster/lobstertrap.exe
+```
+
+If the file is missing, ContextGuard still runs; only real-time DPI proxy features are skipped.
 
 ---
 
@@ -197,6 +258,19 @@ Proxy will be available at **http://localhost:8080**.
 ---
 
 ## API Reference
+
+> Full details: [`docs/API_Reference.md`](./docs/API_Reference.md)
+
+### Authentication
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/auth/register` | None | Create account `{ name, email, password }` |
+| `POST` | `/api/auth/login` | None | Sign in, returns JWT + user |
+| `GET` | `/api/auth/me` | Bearer | Current user profile |
+| `POST` | `/api/auth/logout` | Bearer | Log out (audit log entry) |
+
+All other `/api/*` routes require header: `Authorization: Bearer <access_token>`.
 
 ### Core Endpoints
 
@@ -340,8 +414,11 @@ Click "Scan System Env Vars" → System scans all OS environment variables
 ```
 contextguard/
 ├── backend/
-│   ├── main.py               # FastAPI app — all API endpoints
+│   ├── main.py               # FastAPI app — all API endpoints + auth middleware
+│   ├── auth.py               # JWT + bcrypt password hashing
 │   ├── database.py           # SQLite layer — all data access functions
+│   ├── scripts/
+│   │   └── reset_users.py    # Clear dashboard users (local dev)
 │   ├── gemini.py             # Gemini AI integration — risk scoring, reports
 │   ├── google_workspace.py   # Google Workspace Admin SDK — OAuth enumeration
 │   ├── oauth_scanner.py      # OAuth scan pipeline — score + save apps
@@ -356,14 +433,16 @@ contextguard/
 │       └── contextguard.db   # SQLite database
 ├── frontend/
 │   └── src/
-│       ├── App.jsx            # Main shell — sidebar, real status indicator
+│       ├── App.jsx            # Routes, dashboard shell, marketing pages
+│       ├── auth.jsx           # AuthProvider, axios token interceptors
+│       ├── AuthPages.jsx      # Login and signup pages
 │       ├── ThreatFeed.jsx     # Live DPI event feed + compliance report
 │       ├── OAuthApps.jsx      # OAuth audit — connect workspace, risk scores
 │       ├── EnvGuardian.jsx    # Env var monitoring + real system scan
 │       ├── RedTeamSimulator.jsx # Live prompt tester + attack simulation
 │       └── IncidentResponse.jsx # Incident tracking + remediation
 ├── lobster/
-│   ├── lobstertrap.exe        # Pre-compiled Lobster Trap binary (Windows)
+│   ├── lobstertrap.exe        # Place binary here (build separately — see lobster/README.md)
 │   ├── webhook_bridge.py      # Log-tailing bridge → FastAPI webhook
 │   └── configs/
 │       └── default_policy.yaml # DPI policy rules
@@ -393,9 +472,9 @@ contextguard/
 
 ## Tech Stack
 
-**Backend:** Python 3.11 · FastAPI · SQLite · google-api-python-client · google-generativeai · python-dotenv
+**Backend:** Python 3.11 · FastAPI · SQLite · PyJWT · bcrypt · google-api-python-client · google-generativeai · python-dotenv
 
-**Frontend:** React 18 · Vite · Axios · Lucide Icons · Vanilla CSS
+**Frontend:** React 18 · Vite · React Router · Axios · Tailwind CSS · Lucide Icons
 
 **AI:** Google Gemini 2.5 Pro (risk analysis, compliance reports) · Gemini 2.5 Flash (real-time classification)
 
