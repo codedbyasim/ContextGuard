@@ -642,7 +642,6 @@ function Dashboard() {
       await axios.post(`${API}/api/workspace/disconnect`)
       setSystemStatus(prev => ({ ...prev, workspace: { ...prev.workspace, connected: false } }))
     } catch (e) { console.error('Failed to disconnect', e) }
-    navigate('/')
   }
 
   const TABS = [
@@ -683,13 +682,7 @@ function Dashboard() {
     )
   }
 
-  if (!wsConnected) {
-    return (
-      <div className="h-screen w-screen bg-[#09090b] overflow-hidden relative">
-        <OAuthApps />
-      </div>
-    )
-  }
+
 
   return (
     <div className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden">

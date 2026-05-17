@@ -210,6 +210,11 @@ def init_db():
             name            TEXT NOT NULL,
             created_at      TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS system_config (
+            key             TEXT PRIMARY KEY,
+            value           TEXT NOT NULL
+        );
     """)
 
     # Seed with a known supply-chain breach IOC
@@ -262,6 +267,38 @@ def _migrate_env_alerts_columns(cursor):
     cols = {row['column_name'] for row in cursor.fetchall()}
     if "created_at" not in cols:
         cursor.execute("ALTER TABLE env_alerts ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
+
+
+def set_system_config(key: str, value: str):
+    """Set a system configuration key-value pair."""
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("""
+        INSERT INTO system_config (key, value)
+        VALUES (%s, %s)
+        ON CONFLICT (key) DO UPDATE SET value = excluded.value
+    """, (key, value))
+    conn.commit()
+    release_connection(conn)
+
+
+def get_system_config(key: str, default: str = "") -> str:
+    """Get a system configuration key-value pair."""
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT value FROM system_config WHERE key = %s", (key,))
+    row = cursor.fetchone()
+    release_connection(conn)
+    return row["value"] if row else default
+
+
+def delete_system_config(key: str):
+    """Delete a system configuration key."""
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("DELETE FROM system_config WHERE key = %s", (key,))
+    conn.commit()
+    release_connection(conn)
 
 
 # ═══════════════════════════════════════════

@@ -17,7 +17,10 @@ htmlcov/
 *.env
 !.env.example
 workspace_creds.json
-midyear-castle-*.json
+backend/workspace_creds.json
+*credentials*.json
+*service_account*.json
+*creds*.json
 
 # Database
 *.db

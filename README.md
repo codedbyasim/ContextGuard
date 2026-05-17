@@ -39,54 +39,59 @@ It answers three critical questions:
 ## Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Enterprise["ENTERPRISE ENVIRONMENT"]
-        direction TB
-        
-        Tools["Employee AI Tools\n(Cursor, Copilot, ChatGPT, etc.)"]
-        
-        Proxy["Veea Lobster Trap :8080\n(Deep Prompt Inspection Proxy)"]
-        ProxyNote["• Credential pattern matching\n• Prompt injection detection\n• PII scanning\n• Intent mismatch detection"]
-        
-        Backend["FastAPI Backend :3000"]
-        BackendNote["• Gemini 2.5 Pro Classification\n• OAuth risk scoring\n• Env variable guardian\n• Incident response engine\n• Immutable audit log\n• Self-healing thread pool"]
-        
-        UI["React Dashboard :5173"]
-        UINote["• Threat Feed\n• OAuth Apps audit\n• Env Guardian\n• Red-Team Simulator\n• Incident Response\n• Glassmorphic Signup/Login"]
-        
-        Tools --> Proxy
-        Proxy --- ProxyNote
-        
-        Proxy -- "Webhook Events" --> Backend
-        Backend --- BackendNote
-        
-        Backend --> UI
-        UI --- UINote
+graph TD
+    classDef client fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef server fill:#0f172a,stroke:#6366f1,stroke-width:2px,color:#f8fafc;
+    classDef database fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#f8fafc;
+    classDef external fill:#0f172a,stroke:#f59e0b,stroke-width:2px,color:#f8fafc;
+    classDef proxy fill:#0f172a,stroke:#ec4899,stroke-width:2px,color:#f8fafc;
+
+    subgraph ClientSpace["ENTERPRISE CLIENT SPACE"]
+        UI["React 18 Glassmorphic Dashboard<br/>(Threat Feed, Apps grid, Env Guardian)"]:::client
+        Traffic["Third-Party AI Tools / Agents<br/>(Cursor, ChatGPT, Copilot)"]:::client
     end
 
-    subgraph Cloud["SUPABASE SECURE CLOUD"]
-        DB[("PostgreSQL\nDatabase Pool")]
-        AuthGateway["Supabase Auth\n(Asymmetric ES256 JWKS)"]
+    subgraph DefenseGate["DEEP PACKET INSPECTION LAYER"]
+        Proxy["Veea Lobster Trap Proxy (:8080)<br/>(YAML policy engine, Rate-limiting)"]:::proxy
     end
 
-    Backend -- "SSL Connection Pool" --> DB
-    Backend -- "OpenID Key Discovery" --> AuthGateway
-    UI -- "Asymmetric Auth" --> AuthGateway
+    subgraph SecurityCore["CONTEXTGUARD SECURE RUNTIME"]
+        Backend["FastAPI Backend Engine (:3000)<br/>(Asymmetric JWKS middleware, Threat pipeline)"]:::server
+        InMem["In-Memory Credentials Parser<br/>(Service Account Info Dictionary)"]:::server
+    end
 
-    classDef default fill:#f8fafc,stroke:#e2e8f0,stroke-width:2px,color:#1e293b;
-    classDef highlight fill:#eff6ff,stroke:#bfdbfe,stroke-width:2px,color:#1d4ed8;
-    classDef alert fill:#fff1f2,stroke:#fecdd3,stroke-width:2px,color:#be123c;
-    classDef proxy fill:#fffbeb,stroke:#fef3c7,stroke-width:2px,color:#b45309;
-    classDef bg fill:#ffffff,stroke:#f1f5f9,stroke-width:2px,color:#334155;
-    classDef cloud fill:#f0fdf4,stroke:#bbf7d0,stroke-width:2px,color:#15803d;
+    subgraph CloudInfra["SECURE CLOUD PLATFORM"]
+        DB[(Supabase PostgreSQL Pool)<br/>• system_config table<br/>• oauth_apps & audit_log]:::database
+        Auth["Supabase Auth Gateway<br/>(Asymmetric ES256 OIDC)"]:::database
+    end
+
+    subgraph GoogleCloud["GOOGLE SECURE APIS"]
+        Workspace["Google Workspace Admin SDK<br/>(OAuth App Enumeration API)"]:::external
+        Gemini["Google Gemini AI Platform<br/>(Threat intelligence & Auto-remediation)"]:::external
+    end
+
+    %% Flow Paths
+    Traffic -->|Intercept prompts / responses| Proxy
+    Proxy -->|Forward Webhook alerts| Backend
     
-    class Proxy proxy;
-    class Backend highlight;
-    class DB cloud;
-    class AuthGateway cloud;
-    class UI highlight;
-    class Enterprise bg;
-    class Cloud bg;
+    UI -->|Render UI / React Router| ClientSpace
+    UI -->|Authenticate with JWT| Auth
+    
+    Backend -->|Verify ES256 signatures| Auth
+    Backend -->|SSL Connection Pool| DB
+    Backend -->|Fetch / Save configs| DB
+    
+    Backend -->|Retrieve parsed JSON dict| InMem
+    InMem -->|Authenticate directly in-memory| Workspace
+    
+    Backend -->|Generate threat intel & reports| Gemini
+    
+    %% Styling and Subgraph Customization
+    style ClientSpace fill:#020617,stroke:#334155,stroke-width:2px;
+    style DefenseGate fill:#020617,stroke:#334155,stroke-width:2px;
+    style SecurityCore fill:#020617,stroke:#334155,stroke-width:2px;
+    style CloudInfra fill:#020617,stroke:#334155,stroke-width:2px;
+    style GoogleCloud fill:#020617,stroke:#334155,stroke-width:2px;
 ```
 
 ---
@@ -171,12 +176,10 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_public_key_here
 # Gemini AI Engine Scaffold
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_USE_NATIVE=false
-
-# Google Workspace Discovery (Service Account Integration)
-GOOGLE_ADMIN_EMAIL=admin@yourcompany.com
-GOOGLE_WORKSPACE_CREDS=D:\Absolute\Path\To\backend\workspace_creds.json
-OAUTH_USE_SYNTHETIC=false
 ```
+
+> [!NOTE]
+> **Google Workspace credentials are 100% database-driven!** You do not need to configure any workspace path or admin emails inside your `.env` file anymore. Simply open your dashboard, go to the **OAuth Apps** page, click **Connect Workspace**, and upload your JSON credentials securely directly from the UI! The credentials will reside safe and secure inside your Supabase DB.
 
 > **Never commit your root `.env` file** — it contains active production secrets. It is automatically blocked from Git commits by our project `.gitignore` rules.
 

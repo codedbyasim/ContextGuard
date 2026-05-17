@@ -18,27 +18,40 @@ SCOPES = [
 
 def _scan_workspace_api() -> list:
     """FR-1.1–1.2: Real Google Workspace Admin SDK enumeration."""
-    creds_path = os.getenv("GOOGLE_WORKSPACE_CREDS")
-    admin_email = os.getenv("GOOGLE_ADMIN_EMAIL")
+    from database import get_system_config
 
-    if creds_path and not os.path.isabs(creds_path):
-        # Dynamically locate relative path relative to active process cwd or current module path
-        possible_paths = [
-            os.path.abspath(creds_path),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), creds_path)),
-            os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), creds_path))
-        ]
-        for p in possible_paths:
-            if os.path.exists(p):
-                creds_path = p
-                break
+    admin_email = os.getenv("GOOGLE_ADMIN_EMAIL") or get_system_config("google_admin_email")
+    creds_json = get_system_config("google_workspace_creds")
 
-    if not creds_path or not os.path.exists(creds_path):
-        raise FileNotFoundError(f"Google Workspace credentials not found: {creds_path}")
     if not admin_email:
-        raise ValueError("GOOGLE_ADMIN_EMAIL is not set in .env")
+        raise ValueError("Google Admin Email is not configured.")
 
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+    if creds_json:
+        try:
+            info = json.loads(creds_json)
+            creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+        except Exception as e:
+            logger.error("Failed to parse Google credentials from Database: %s", e)
+            raise e
+    else:
+        creds_path = os.getenv("GOOGLE_WORKSPACE_CREDS")
+        if creds_path and not os.path.isabs(creds_path):
+            # Dynamically locate relative path relative to active process cwd or current module path
+            possible_paths = [
+                os.path.abspath(creds_path),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), creds_path)),
+                os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), creds_path))
+            ]
+            for p in possible_paths:
+                if os.path.exists(p):
+                    creds_path = p
+                    break
+
+        if not creds_path or not os.path.exists(creds_path):
+            raise FileNotFoundError(f"Google Workspace credentials not found in Database or env: {creds_path}")
+
+        creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+
     creds = creds.with_subject(admin_email)
     directory_service = build("admin", "directory_v1", credentials=creds)
 
@@ -134,15 +147,14 @@ def scan_oauth_apps() -> list:
     """
     FR-1.1: Enumerate OAuth apps — Workspace API.
     """
-    if os.getenv("OAUTH_USE_SYNTHETIC", "false").lower() == "true":
-        logger.info("Using SYNTHETIC Workspace data mode (bypassing Google API).")
-        return _generate_synthetic_apps()
+    from database import get_system_config
+    use_synthetic = os.getenv("OAUTH_USE_SYNTHETIC") or get_system_config("oauth_use_synthetic", "false")
+    if use_synthetic.lower() == "true":
+        logger.info("Workspace disconnected or synthetic mode enabled. Returning empty app list.")
+        return []
 
     try:
         return _scan_workspace_api()
     except Exception as e:
         logger.error("Workspace scan failed: %s", e)
-        if "unauthorized_client" in str(e):
-            logger.warning("Falling back to synthetic data due to Domain-Wide Delegation restriction.")
-            return _generate_synthetic_apps()
         return []

@@ -459,28 +459,15 @@ def trigger_scan():
 @app.post("/api/workspace/connect")
 def connect_workspace(payload: WorkspaceConnectRequest):
     """Dynamically connect a Google Workspace."""
-    creds_path = os.path.join(os.path.dirname(__file__), "workspace_creds.json")
-    with open(creds_path, "w", encoding="utf-8") as f:
-        f.write(payload.creds_json)
+    from database import set_system_config
     
-    os.environ["GOOGLE_WORKSPACE_CREDS"] = creds_path
-    os.environ["GOOGLE_ADMIN_EMAIL"] = payload.admin_email
-    os.environ["OAUTH_USE_SYNTHETIC"] = "false"
-    
-    import dotenv
-    env_file = os.path.join(os.path.dirname(__file__), ".env")
-    try:
-        dotenv.set_key(env_file, "GOOGLE_WORKSPACE_CREDS", creds_path)
-        dotenv.set_key(env_file, "GOOGLE_ADMIN_EMAIL", payload.admin_email)
-        dotenv.set_key(env_file, "OAUTH_USE_SYNTHETIC", "false")
-    except Exception as e:
-        print("⚠️ [SYSTEM] Warning: Unable to write to .env file:", e)
+    set_system_config("google_workspace_creds", payload.creds_json)
+    set_system_config("google_admin_email", payload.admin_email)
+    set_system_config("oauth_use_synthetic", "false")
     
     # Clear out dummy/synthetic data so the new workspace shows actual state
     clear_oauth_apps()
     
-    # We do NOT run the scan here because it takes a long time and writing to .env
-    # triggers Uvicorn to reload, which would kill the request.
     return {"status": "connected"}
 
 
@@ -1123,9 +1110,11 @@ def modules_status():
 def system_status():
     """Real-time health check: workspace connection, proxy, DB."""
     import requests as req
+    from database import get_system_config
 
     creds_path = os.getenv("GOOGLE_WORKSPACE_CREDS", "")
-    admin_email = os.getenv("GOOGLE_ADMIN_EMAIL", "")
+    admin_email = os.getenv("GOOGLE_ADMIN_EMAIL", "") or get_system_config("google_admin_email")
+    creds_json = get_system_config("google_workspace_creds")
 
     resolved_path = creds_path
     if creds_path and not os.path.isabs(creds_path):
@@ -1140,10 +1129,8 @@ def system_status():
                 break
 
     workspace_connected = (
-        bool(creds_path)
-        and os.path.exists(resolved_path)
-        and bool(admin_email)
-    )
+        bool(creds_json) or (bool(creds_path) and os.path.exists(resolved_path))
+    ) and bool(admin_email)
 
     proxy_url = os.getenv("PROXY_URL", "http://localhost:8080")
     proxy_online = False
@@ -1173,17 +1160,14 @@ def system_status():
 @app.post("/api/workspace/disconnect")
 def disconnect_workspace():
     """Clear real workspace data."""
-    import dotenv
-    env_file = os.path.join(os.path.dirname(__file__), ".env")
-    try:
-        dotenv.set_key(env_file, "GOOGLE_WORKSPACE_CREDS", "")
-        dotenv.set_key(env_file, "GOOGLE_ADMIN_EMAIL", "")
-    except Exception as e:
-        print("⚠️ [SYSTEM] Warning: Unable to write to .env file:", e)
-    os.environ.pop("GOOGLE_WORKSPACE_CREDS", None)
-    from database import clear_all_workspace_data, save_audit_log
+    from database import delete_system_config, set_system_config, clear_all_workspace_data, save_audit_log
+    
+    delete_system_config("google_workspace_creds")
+    delete_system_config("google_admin_email")
+    set_system_config("oauth_use_synthetic", "true")
+    
     clear_all_workspace_data()
-    save_audit_log("admin", "workspace_disconnected", "workspace", "Disconnected workspace and wiped local data")
+    save_audit_log("admin", "workspace_disconnected", "workspace", "Disconnected workspace and wiped credentials from database")
     return {"status": "disconnected"}
 
 # ──────────────────────────────────────────
@@ -1212,51 +1196,34 @@ if __name__ == "__main__":
     import uvicorn
     import subprocess
     import sys
-    import os
     
     frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
-    is_production = os.getenv("RENDER") == "true" or os.getenv("PORT") is not None
     
     print("==================================================")
     print("🚀 ContextGuard Starting...")
     print("==================================================")
     
-    if is_production:
-        print("🛡️ Running in PRODUCTION Mode...")
-        port = int(os.getenv("PORT", 8000))
-        print(f"👉 FastAPI & React Static serving on port: {port}")
-        print("==================================================")
-        try:
-            uvicorn.run("main:app", host="0.0.0.0", port=port)
-        except KeyboardInterrupt:
-            pass
+    # Check if frontend dependencies are installed
+    if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
+        print("📦 Installing frontend dependencies...")
+        subprocess.run("npm install", cwd=frontend_dir, shell=True)
+    
+    # Start the frontend dev server in the background
+    print("✨ Starting React Frontend (Vite) in background...")
+    frontend_process = subprocess.Popen("npm run dev", cwd=frontend_dir, shell=True)
+    
+    print("🛡️ Starting FastAPI Backend...")
+    print("👉 Dashboard will be available at: http://localhost:5173")
+    print("👉 API Backend running at: http://localhost:3000")
+    print("👉 Proxy running at: http://localhost:8080")
+    print("==================================================")
+    
+    try:
+        uvicorn.run("main:app", host="0.0.0.0", port=3000)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("\n🛑 Shutting down ContextGuard...")
+        frontend_process.terminate()
         sys.exit(0)
-    else:
-        print("🛡️ Running in DEVELOPMENT Mode...")
-        # Check if frontend dependencies are installed
-        if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
-            print("📦 Installing frontend dependencies...")
-            subprocess.run("npm install", cwd=frontend_dir, shell=True)
-        
-        # Start the frontend dev server in the background
-        print("✨ Starting React Frontend (Vite) in background...")
-        frontend_process = subprocess.Popen("npm run dev", cwd=frontend_dir, shell=True)
-        
-        print("🛡️ Starting FastAPI Backend...")
-        print("👉 Dashboard will be available at: http://localhost:5173")
-        print("👉 API Backend running at: http://localhost:3000")
-        print("👉 Proxy running at: http://localhost:8080")
-        print("==================================================")
-        
-        try:
-            uvicorn.run("main:app", host="0.0.0.0", port=3000)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            print("\n🛑 Shutting down ContextGuard...")
-            try:
-                frontend_process.terminate()
-            except Exception:
-                pass
-            sys.exit(0)
 
