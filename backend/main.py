@@ -65,8 +65,6 @@ from database import (
     mark_env_rotated,
     save_redteam_run,
     get_redteam_runs,
-    get_incidents,
-    get_incident,
 )
 from gemini import score_oauth_app, classify_prompt_intent, generate_report
 from dpi import (
@@ -79,13 +77,7 @@ from dpi import (
 )
 from behavior import update_agent_baseline, compute_behavioral_deviation
 from env_guardian import days_since_rotation
-from incident_response import (
-    create_incident_from_event,
-    advance_incident_step,
-    get_workflow_definition,
-    coordinate_credential_rotation,
-    revoke_oauth_app_coordination,
-)
+
 from modules_status import get_modules_status
 from oauth_scanner import run_oauth_scan, refresh_ioc_database
 from env_guardian import classify_env_var, analyze_dpi_for_env_access, get_remediation_workflow
@@ -381,9 +373,6 @@ class EnvVarRequest(BaseModel):
     value_hint: Optional[str] = None
 
 
-class IncidentStepAdvance(BaseModel):
-    step_id: int
-    notes: str = ""
 
 
 class WorkspaceConnectRequest(BaseModel):
@@ -534,6 +523,9 @@ def delete_from_whitelist(app_client_id: str):
 @app.get("/api/events")
 def list_events(hours: int = 24):
     """Return DPI events from the last N hours."""
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        return {"events": [], "count": 0}
     events = get_events(hours=hours)
     return {"events": events, "count": len(events)}
 
@@ -647,11 +639,6 @@ def lobster_webhook(payload: LobsterWebhookPayload):
     for alert in env_alerts:
         alert["event_id"] = event_id
         save_env_alert(alert)
-        if alert.get("severity") == "CRITICAL":
-            try:
-                create_incident_from_event(event_id)
-            except Exception as e:
-                logger.warning("Auto-incident creation failed: %s", e)
 
     save_audit_log(
         "lobster_trap",
@@ -687,6 +674,9 @@ def inspect_prompt(body: InspectPromptRequest):
     """
     FR-4.7: Single-prompt debugger — local heuristics + Gemini classification.
     """
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        raise HTTPException(status_code=400, detail="Google Workspace must be connected first.")
     local = inspect_prompt_local(body.prompt)
     metadata = {**local, "declared_intent": body.declared_intent}
     classification = classify_prompt_intent({
@@ -714,6 +704,9 @@ def live_dpi_test(body: InspectPromptRequest):
     saves it as a real DPI event, returns full verdict.
     Used by the in-app Prompt Tester UI.
     """
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        raise HTTPException(status_code=400, detail="Google Workspace must be connected first.")
     from dpi import inspect_prompt_local
     local = inspect_prompt_local(body.prompt)
 
@@ -946,6 +939,9 @@ def list_audit_log(limit: int = 100):
 @app.get("/api/env")
 def list_env_variables():
     """List monitored environment variables with classification and rotation status (FR-3.6)."""
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        return {"variables": [], "count": 0}
     variables = get_env_variables()
     for var in variables:
         var["rotation_status"] = days_since_rotation(var.get("last_rotated"))
@@ -955,6 +951,9 @@ def list_env_variables():
 @app.post("/api/env/classify")
 def classify_env(body: EnvVarRequest):
     """FR-3.1–3.2: Classify a single environment variable."""
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        raise HTTPException(status_code=400, detail="Google Workspace must be connected first.")
     result = classify_env_var(body.var_name, body.value_hint)
     save_env_variable({
         "var_name": result["var_name"],
@@ -970,6 +969,9 @@ def classify_env(body: EnvVarRequest):
 @app.get("/api/env/alerts")
 def list_env_alerts(hours: int = 24, unacknowledged_only: bool = False):
     """FR-3.3: Env guardian alerts (target delivery <30s from DPI event)."""
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        return {"alerts": [], "count": 0}
     alerts = get_env_alerts(hours=hours, unacknowledged_only=unacknowledged_only)
     return {"alerts": alerts, "count": len(alerts)}
 
@@ -992,6 +994,9 @@ def scan_real_env_variables():
     Scan real OS environment variables, classify sensitive ones with Gemini,
     and persist them. Returns only SENSITIVE/MISCLASSIFIED vars (never values).
     """
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        raise HTTPException(status_code=400, detail="Google Workspace must be connected first.")
     import os as _os
     SKIP = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "COMSPEC",
             "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS", "OS", "HOMEDRIVE",
@@ -1038,6 +1043,9 @@ def scan_real_env_variables():
 @app.post("/api/redteam/run")
 def run_redteam():
     """FR-6.1–6.3: Execute AI supply-chain attack simulation."""
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        raise HTTPException(status_code=400, detail="Google Workspace must be connected first.")
     logger.info("Red-team simulation started")
     report = run_redteam_simulation()
     run_id = save_redteam_run(report)
@@ -1052,68 +1060,19 @@ def run_redteam():
 
 @app.get("/api/redteam/runs")
 def list_redteam_runs(limit: int = 10):
+    from google_workspace import WORKSPACE_STATE
+    if WORKSPACE_STATE.use_synthetic:
+        return {"runs": [], "count": 0}
     runs = get_redteam_runs(limit=limit)
     return {"runs": runs, "count": len(runs)}
 
 
 # ──────────────────────────────────────────
-# M7: Incident Response
+# M7: Incident Response (decommissioned)
 # ──────────────────────────────────────────
 
 
-@app.get("/api/incidents")
-def list_incidents(status: Optional[str] = None):
-    incidents = get_incidents(status=status)
-    return {"incidents": incidents, "count": len(incidents)}
 
-
-@app.post("/api/incidents")
-def open_incident(event_id: int):
-    """Create guided remediation workflow from DPI event."""
-    try:
-        incident = create_incident_from_event(event_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    save_audit_log("soc", "incident_opened", f"incident_{incident['id']}", f"event_{event_id}")
-    return incident
-
-
-@app.get("/api/incidents/{incident_id}")
-def get_incident_detail(incident_id: int):
-    incident = get_incident(incident_id)
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    return incident
-
-
-@app.post("/api/incidents/{incident_id}/advance")
-def advance_incident(incident_id: int, body: IncidentStepAdvance):
-    """M7: Complete a workflow step and advance."""
-    try:
-        return advance_incident_step(incident_id, body.step_id, body.notes)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-@app.get("/api/incidents/workflows/{workflow_key}")
-def incident_workflow_template(workflow_key: str):
-    return get_workflow_definition(workflow_key)
-
-
-@app.post("/api/incidents/{incident_id}/rotate")
-def one_click_rotation(incident_id: int, var_name: Optional[str] = None):
-    """M7: One-click credential rotation coordination."""
-    names = [var_name] if var_name else None
-    try:
-        return coordinate_credential_rotation(incident_id, names)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-@app.post("/api/incidents/revoke-oauth/{app_client_id}")
-def coordinate_oauth_revoke(app_client_id: str):
-    """M7: OAuth revocation coordination checklist."""
-    return revoke_oauth_app_coordination(app_client_id)
 
 
 @app.get("/api/dpi/backends")

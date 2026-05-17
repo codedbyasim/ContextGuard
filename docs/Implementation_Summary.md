@@ -21,12 +21,12 @@ ContextGuard is a fully production-capable enterprise AI security platform built
 - Live prompt injection tester (`POST /api/dpi/test`)
 - Environment variable scan + classification
 - Red-team simulation runner
-- Incident response workflow engine
+- Incident response workflow engine (Decommissioned)
 - System health endpoint (`GET /api/status`)
 - Workspace connect/disconnect (`POST /api/workspace/connect`)
 
 **`database.py`** — SQLite persistence layer:
-- 8 tables: `oauth_apps`, `dpi_events`, `audit_log`, `ioc_list`, `oauth_whitelist`, `env_variables`, `env_alerts`, `incidents`
+- 7 active tables: `oauth_apps`, `dpi_events`, `audit_log`, `ioc_list`, `oauth_whitelist`, `env_variables`, `env_alerts` (incidents decommissioned)
 - All data access functions, no ORM overhead
 - `clear_oauth_apps()` for clean workspace transitions
 
@@ -68,10 +68,8 @@ ContextGuard is a fully production-capable enterprise AI security platform built
 - Flags behavioral anomalies vs. established baseline
 - Triggers app rescore on anomaly detection
 
-**`incident_response.py`** — Remediation engine:
-- `create_incident_from_event()` — auto-creates from CRITICAL DPI events
-- Multi-step workflow with playbook definitions per incident type
-- `coordinate_credential_rotation()` — 1-click rotation orchestration
+**`incident_response.py`** — Remediation engine (Decommissioned):
+- Purely legacy components; disabled to satisfy Zero-Persistence Ephemeral Credential compliance.
 
 ---
 
@@ -107,10 +105,8 @@ ContextGuard is a fully production-capable enterprise AI security platform built
   - Every test saved as real DPI event → appears in Threat Feed
 - **AI Supply Chain Attack Simulation** — expandable per-scenario results
 
-**`IncidentResponse.jsx`** — Guided remediation:
-- Incident list with status tracking
-- Step-by-step playbook per incident type
-- Advance step + 1-click rotation buttons
+**`IncidentResponse.jsx`** — Guided remediation (Decommissioned):
+- Removed from the production build to satisfy Zero-Persistence Ephemeral Credential compliance.
 
 ---
 

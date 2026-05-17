@@ -47,27 +47,27 @@ graph TD
     classDef proxy fill:#0f172a,stroke:#ec4899,stroke-width:2px,color:#f8fafc;
 
     subgraph ClientSpace["ENTERPRISE CLIENT SPACE"]
-        UI["React 18 Glassmorphic Dashboard<br/>(Threat Feed, Apps grid, Env Guardian)"]:::client
-        Traffic["Third-Party AI Tools / Agents<br/>(Cursor, ChatGPT, Copilot)"]:::client
+        UI["React 18 Glassmorphic Dashboard - Threat Feed and Env Guardian"]:::client
+        Traffic["Third-Party AI Tools and Agents - Cursor, ChatGPT, Copilot"]:::client
     end
 
     subgraph DefenseGate["DEEP PACKET INSPECTION LAYER"]
-        Proxy["Veea Lobster Trap Proxy (:8080)<br/>(YAML policy engine, Rate-limiting)"]:::proxy
+        Proxy["Veea Lobster Trap Proxy :8080 - YAML policy engine"]:::proxy
     end
 
     subgraph SecurityCore["CONTEXTGUARD SECURE RUNTIME"]
-        Backend["FastAPI Backend Engine (:3000)<br/>(Asymmetric JWKS middleware, Threat pipeline)"]:::server
-        InMem["Volatile In-Memory State<br/>(RAM-Only Ephemeral SA Credentials)"]:::server
+        Backend["FastAPI Backend Engine :3000 - JWKS middleware"]:::server
+        InMem["Volatile In-Memory State - RAM-Only SA Credentials"]:::server
     end
 
     subgraph CloudInfra["SECURE CLOUD PLATFORM"]
-        DB[(Supabase PostgreSQL Pool)<br/>• oauth_apps & audit_log]:::database
-        Auth["Supabase Auth Gateway<br/>(Asymmetric ES256 OIDC)"]:::database
+        DB[("Supabase PostgreSQL Pool - oauth_apps and audit_log")]:::database
+        Auth["Supabase Auth Gateway - Asymmetric ES256 OIDC"]:::database
     end
 
     subgraph GoogleCloud["GOOGLE SECURE APIS"]
-        Workspace["Google Workspace Admin SDK<br/>(OAuth App Enumeration API)"]:::external
-        Gemini["Google Gemini AI Platform<br/>(Threat intelligence & Auto-remediation)"]:::external
+        Workspace["Google Workspace Admin SDK - OAuth App Enumeration"]:::external
+        Gemini["Google Gemini AI Platform - Threat intel and Auto-remediation"]:::external
     end
 
     %% Flow Paths
@@ -105,7 +105,7 @@ graph TD
 | **M4 — Lobster Trap DPI Layer** | ✅ Production | Go-based transparent proxy intercepts all LLM API calls with YAML policy enforcement |
 | **M5 — Governance Dashboard** | ✅ Production | Real-time Threat Feed, OAuth audit, compliance report generation, JWT login/signup |
 | **M6 — Red-Team Simulator** | ✅ Production | Replays real-world AI supply-chain attack scenarios + live in-browser prompt injection tester |
-| **M7 — Incident Response** | ✅ Production | Guided remediation workflows, step tracking, 1-click credential rotation |
+| **M7 — Incident Response** | ⏹️ Decommissioned | Decommissioned to enforce zero-persistence ephemeral compliance |
 
 ## 📚 Project Documentation
 
@@ -328,12 +328,7 @@ All other `/api/*` routes require header: `Authorization: Bearer <access_token>`
 
 ### Incident Response
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/incidents` | All incidents |
-| `POST` | `/api/incidents` | Create incident manually |
-| `POST` | `/api/incidents/{id}/advance` | Advance remediation step |
-| `POST` | `/api/incidents/{id}/rotate` | Coordinate 1-click credential rotation |
+> ⏹️ **Decommissioned** — This module has been decommissioned to adhere to the strict **Zero-Persistence Ephemeral Credential Mode** security compliance. Incidents and their states are no longer retained or logged.
 
 ---
 

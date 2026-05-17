@@ -3,7 +3,6 @@ import ThreatFeed from './ThreatFeed'
 import OAuthApps from './OAuthApps'
 import EnvGuardian from './EnvGuardian'
 import RedTeamSimulator from './RedTeamSimulator'
-import IncidentResponse from './IncidentResponse'
 import { Routes, Route, useNavigate, useLocation, Link, Navigate, useParams } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth, API } from './auth'
@@ -634,7 +633,6 @@ function Dashboard() {
     { id: 'apps', label: 'OAuth Apps', icon: AppWindow },
     { id: 'env', label: 'Env Guardian', icon: FileKey },
     { id: 'redteam', label: 'Red Team', icon: Crosshair },
-    { id: 'response', label: 'Incidents', icon: ShieldAlert },
   ]
 
   if (!TABS.find(t => t.id === activeTab)) {
@@ -642,13 +640,12 @@ function Dashboard() {
   }
 
   const renderContent = () => {
-
+    const wsConnected = systemStatus?.workspace?.connected
     switch (activeTab) {
-      case 'threats': return <ThreatFeed />
-      case 'apps': return <OAuthApps />
-      case 'env': return <EnvGuardian />
-      case 'redteam': return <RedTeamSimulator />
-      case 'response': return <IncidentResponse />
+      case 'threats': return <ThreatFeed wsConnected={wsConnected} />
+      case 'apps': return <OAuthApps wsConnected={wsConnected} />
+      case 'env': return <EnvGuardian wsConnected={wsConnected} />
+      case 'redteam': return <RedTeamSimulator wsConnected={wsConnected} />
       default: return null
     }
   }

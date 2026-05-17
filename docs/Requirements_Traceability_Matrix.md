@@ -85,14 +85,7 @@
 
 ## Module M7 — Incident Response (SRS §2.2)
 
-| Feature | Implementation | Status |
-|---------|----------------|--------|
-| Create incident from CRITICAL event | `create_incident_from_event()` auto-triggered | ✅ Done |
-| Manual incident creation | `POST /api/incidents` | ✅ Done |
-| Step-by-step remediation workflow | `advance_incident_step()` per workflow definition | ✅ Done |
-| Mark steps complete | `POST /api/incidents/{id}/advance` | ✅ Done |
-| 1-click credential rotation | `POST /api/incidents/{id}/rotate` | ✅ Done |
-| Incident status tracking | open / in_progress / resolved | ✅ Done |
+> ⏹️ **Decommissioned** — This module has been decommissioned to satisfy the strict **Zero-Persistence Ephemeral Credential Mode** compliance standards. No persistent incidents are tracked or recorded in the final production release.
 
 ---
 

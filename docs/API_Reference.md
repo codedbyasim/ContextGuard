@@ -382,25 +382,7 @@ Add a new IOC entry. Triggers immediate rescore of all apps.
 
 ## Incident Response
 
-### `GET /api/incidents`
-List all incidents.
-
-### `POST /api/incidents`
-Create a new incident manually.
-
-**Request:**
-```json
-{
-  "event_id": 42,
-  "title": "Credential exfiltration attempt detected"
-}
-```
-
-### `POST /api/incidents/{id}/advance`
-Advance incident to next remediation step.
-
-### `POST /api/incidents/{id}/rotate`
-Coordinate 1-click credential rotation for this incident.
+> ⏹️ **Decommissioned** — This module has been decommissioned to adhere to the strict **Zero-Persistence Ephemeral Credential Mode** security compliance. Incidents and their states are no longer retained or logged.
 
 ---
 
